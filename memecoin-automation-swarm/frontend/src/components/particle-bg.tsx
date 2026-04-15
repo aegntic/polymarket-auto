@@ -6,7 +6,8 @@ interface ParticleBackgroundProps {
   activity?: number; // 0-1 scale
 }
 
-export function ParticleBackground({ activity = 0.3 }: ParticleBackgroundProps) {
+export function ParticleBackground({ activity: rawActivity = 0.3 }: ParticleBackgroundProps) {
+  const activity = Math.max(0, Math.min(1, rawActivity));
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
 

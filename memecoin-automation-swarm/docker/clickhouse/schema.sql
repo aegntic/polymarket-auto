@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS clonet.token_observations
     image_hash      String DEFAULT '',
     creator_address String DEFAULT '',
     deploy_tx       String DEFAULT '',
-    first_seen_at   DateTime64(3, 'UTC'),
-    observed_at     DateTime64(3, 'UTC') DEFAULT now64(3),
+    first_seen_at   DateTime,
+    observed_at     DateTime DEFAULT now(),
     block_slot      UInt64 DEFAULT 0,
 
     -- Source tracking
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS clonet.classifications
     -- Tracking
     methods_used    Array(String),
     reasoning       String DEFAULT '',
-    classified_at   DateTime64(3, 'UTC') DEFAULT now64(3),
+    classified_at   DateTime DEFAULT now(),
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(classified_at)
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS clonet.clone_deployments
     naming_strategy     LowCardinality(String),
     deploy_method       LowCardinality(String),  -- pumpfun, spl_token, token2022
     deploy_tx           String,
-    deployed_at         DateTime64(3, 'UTC') DEFAULT now64(3),
+    deployed_at         DateTime DEFAULT now(),
     research_controlled UInt8 DEFAULT 1,  -- 1 = deployed by us, 0 = observed in wild
 )
 ENGINE = MergeTree()
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS clonet.economy_ledger
     to_module   String,
     amount_micro_usd Int64,
     service     String,
-    settled_at  DateTime64(3, 'UTC') DEFAULT now64(3),
+    settled_at  DateTime DEFAULT now(),
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(settled_at)
@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS clonet.module_pnl
     balance_micro_usd Int64,
     total_earned    Int64,
     total_spent     Int64,
-    snapshot_at     DateTime64(3, 'UTC') DEFAULT now64(3),
+    snapshot_at     DateTime DEFAULT now(),
 )
 ENGINE = ReplacingMergeTree()
 ORDER BY (module, snapshot_at);
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS clonet.llm_usage
     completion_tokens UInt32,
     cost_usd    Float64,
     purpose     LowCardinality(String),  -- classify, content_gen, narrative
-    called_at   DateTime64(3, 'UTC') DEFAULT now64(3),
+    called_at   DateTime DEFAULT now(),
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(called_at)
@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS clonet.circuit_breaker_events
     trigger     String,
     action      String,
     details     String DEFAULT '',
-    fired_at    DateTime64(3, 'UTC') DEFAULT now64(3),
+    fired_at    DateTime DEFAULT now(),
 )
 ENGINE = MergeTree()
 ORDER BY (fired_at);

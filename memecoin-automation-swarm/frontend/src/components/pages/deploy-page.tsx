@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ChainBadge } from "@/components/chain-badge";
+import type { Chain } from "@/lib/types";
 import {
-  generateSignals,
-  generateCircuitBreaker,
-  type Chain,
-} from "@/lib/mock-data";
+  getSignals,
+  getCircuitBreaker,
+  deployToken,
+  type TokenSignal,
+  type CircuitBreakerState,
+} from "@/lib/api-collector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -59,8 +62,6 @@ const STRATEGIES = [
   },
 ];
 
-const SIGNALS = generateSignals(20);
-
 type DeployStep = "select" | "configure" | "deploying" | "result";
 
 interface DeployResult {
@@ -79,24 +80,74 @@ export default function DeployPage() {
   const [customName, setCustomName] = useState<string>("");
   const [result, setResult] = useState<DeployResult | null>(null);
 
-  const cb = generateCircuitBreaker();
-  const canDeploy = cb.level !== "red" && cb.clonesToday < cb.maxPerDay;
+  const [signals, setSignals] = useState<TokenSignal[]>([]);
+  const [cb, setCb] = useState<CircuitBreakerState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("");
 
-  const selectedSignal = SIGNALS.find((s) => s.id === selectedToken);
+  useEffect(() => {
+    async function load() {
+      const [signalsRes, cbRes] = await Promise.all([
+        getSignals({ limit: 20 }),
+        getCircuitBreaker(),
+      ]);
+      if (signalsRes.success && signalsRes.data) {
+        setSignals(signalsRes.data);
+      }
+      if (cbRes.success && cbRes.data) {
+        setCb(cbRes.data);
+      }
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const canDeploy = cb ? cb.level !== "red" && cb.clonesToday < cb.maxPerDay : true;
+
+  const selectedSignal = signals.find((s) => s.id === selectedToken);
+
+  const filteredSignals = filter
+    ? signals.filter(
+        (s) =>
+          s.name.toLowerCase().includes(filter.toLowerCase()) ||
+          s.address.toLowerCase().includes(filter.toLowerCase()),
+      )
+    : signals;
 
   const handleDeploy = async () => {
     setStep("deploying");
-    await new Promise((r) => setTimeout(r, 2000));
-    const success = cb.level !== "red";
-    setResult({
-      success,
-      tokenName: customName || selectedSignal?.name || "Unknown",
-      txHash: `${chain === "solana" ? "" : "0x"}${Array.from({ length: chain === "solana" ? 44 : 40 }, () =>
-        "0123456789ABCDEF"[Math.floor(Math.random() * 16)]
-      ).join("")}`,
-      chain,
-      strategy,
-    });
+    try {
+      const res = await deployToken({
+        name: customName || selectedSignal?.name || "Unknown",
+        chain,
+        strategy,
+      });
+      if (res.success && res.data) {
+        setResult({
+          success: res.data.status !== "failed",
+          tokenName: res.data.tokenName,
+          txHash: res.data.txHash,
+          chain: res.data.chain,
+          strategy: res.data.strategy,
+        });
+      } else {
+        setResult({
+          success: false,
+          tokenName: customName || selectedSignal?.name || "Unknown",
+          txHash: "",
+          chain,
+          strategy,
+        });
+      }
+    } catch {
+      setResult({
+        success: false,
+        tokenName: customName || selectedSignal?.name || "Unknown",
+        txHash: "",
+        chain,
+        strategy,
+      });
+    }
     setStep("result");
   };
 
@@ -108,29 +159,59 @@ export default function DeployPage() {
     setResult(null);
   };
 
+  if (loading) {
+    return (
+      <AppShell title="Deploy" description="Clone token deployment manager">
+        <div className="flex items-center justify-center py-32">
+          <Loader2 className="h-8 w-8 animate-spin text-[#d4af37]" />
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell title="Deploy" description="Clone token deployment manager">
       {/* Status cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="Circuit Breaker"
-          value={cb.level.toUpperCase()}
-          sublabel={cb.level === "red" ? "Deployment halted" : "Deployments allowed"}
-          trend={cb.level === "green" ? "up" : cb.level === "red" ? "down" : "neutral"}
+          value={cb ? cb.level.toUpperCase() : "N/A"}
+          sublabel={
+            cb
+              ? cb.level === "red"
+                ? "Deployment halted"
+                : "Deployments allowed"
+              : "Loading..."
+          }
+          trend={
+            cb
+              ? cb.level === "green"
+                ? "up"
+                : cb.level === "red"
+                  ? "down"
+                  : "neutral"
+              : "neutral"
+          }
           icon={<ShieldAlert className="h-5 w-5" />}
         />
         <StatCard
           label="Daily Quota"
-          value={`${cb.clonesToday}/${cb.maxPerDay}`}
-          sublabel={`${cb.maxPerDay - cb.clonesToday} remaining today`}
-          trend={cb.clonesToday > 40 ? "down" : "neutral"}
+          value={cb ? `${cb.clonesToday}/${cb.maxPerDay}` : "N/A"}
+          sublabel={
+            cb ? `${cb.maxPerDay - cb.clonesToday} remaining today` : "Loading..."
+          }
+          trend={cb ? (cb.clonesToday > 40 ? "down" : "neutral") : "neutral"}
           icon={<Rocket className="h-5 w-5" />}
         />
         <StatCard
           label="LLM Budget"
-          value={`$${cb.llmCostToday.toFixed(2)}`}
-          sublabel={`of $${cb.llmBudgetPerDay.toFixed(2)} daily budget`}
-          trend={cb.llmCostToday > 8 ? "down" : "neutral"}
+          value={cb ? `$${cb.llmCostToday.toFixed(2)}` : "N/A"}
+          sublabel={
+            cb
+              ? `of $${cb.llmBudgetPerDay.toFixed(2)} daily budget`
+              : "Loading..."
+          }
+          trend={cb ? (cb.llmCostToday > 8 ? "down" : "neutral") : "neutral"}
           icon={<Crosshair className="h-5 w-5" />}
         />
       </div>
@@ -156,11 +237,13 @@ export default function DeployPage() {
                 <div className="mb-4">
                   <Input
                     placeholder="Filter tokens by name or address..."
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
                     className="border-[rgba(212,175,55,0.12)] bg-[rgba(255,255,255,0.03)] text-sm text-[#f5f5f5] placeholder:text-[#555]"
                   />
                 </div>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {SIGNALS.slice(0, 10).map((signal) => (
+                  {filteredSignals.slice(0, 10).map((signal) => (
                     <button
                       key={signal.id}
                       onClick={() => setSelectedToken(signal.id)}
@@ -187,8 +270,8 @@ export default function DeployPage() {
                           signal.score >= 0.8
                             ? "bg-[#ef4444]/10 text-[#ef4444]"
                             : signal.score >= 0.5
-                            ? "bg-[#eab308]/10 text-[#eab308]"
-                            : "bg-[#22c55e]/10 text-[#22c55e]"
+                              ? "bg-[#eab308]/10 text-[#eab308]"
+                              : "bg-[#22c55e]/10 text-[#22c55e]"
                         }`}
                       >
                         {signal.score.toFixed(2)}
@@ -232,9 +315,12 @@ export default function DeployPage() {
                   <div className="flex items-center gap-3 rounded-lg bg-[rgba(255,255,255,0.02)] p-4">
                     <ChainBadge chain={selectedSignal.chain} />
                     <div>
-                      <p className="font-medium text-[#f5f5f5]">{selectedSignal.name}</p>
+                      <p className="font-medium text-[#f5f5f5]">
+                        {selectedSignal.name}
+                      </p>
                       <p className="text-xs text-[#666]">
-                        Clone Score: {selectedSignal.score.toFixed(2)} | {selectedSignal.symbol}
+                        Clone Score: {selectedSignal.score.toFixed(2)} |{" "}
+                        {selectedSignal.symbol}
                       </p>
                     </div>
                   </div>
@@ -246,7 +332,11 @@ export default function DeployPage() {
                   <Input
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
-                    placeholder={selectedSignal ? `e.g., ${selectedSignal.name.replace(/o/g, "0").replace(/l/g, "1")} ` : "Enter clone token name"}
+                    placeholder={
+                      selectedSignal
+                        ? `e.g., ${selectedSignal.name.replace(/o/g, "0").replace(/l/g, "1")}`
+                        : "Enter clone token name"
+                    }
                     className="border-[rgba(212,175,55,0.12)] bg-[rgba(255,255,255,0.03)] text-sm text-[#f5f5f5] placeholder:text-[#555]"
                   />
                 </div>
@@ -254,7 +344,12 @@ export default function DeployPage() {
                 {/* Chain selection */}
                 <div className="space-y-2">
                   <Label className="text-sm text-[#888]">Target Chain</Label>
-                  <Select value={chain} onValueChange={(v) => { if (v !== null) setChain(v as Chain); }}>
+                  <Select
+                    value={chain}
+                    onValueChange={(v) => {
+                      if (v !== null) setChain(v as Chain);
+                    }}
+                  >
                     <SelectTrigger className="w-full border-[rgba(212,175,55,0.12)] bg-[rgba(255,255,255,0.03)] text-sm text-[#f5f5f5]">
                       <SelectValue />
                     </SelectTrigger>
@@ -281,15 +376,17 @@ export default function DeployPage() {
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-[#f5f5f5]">{s.name}</p>
+                          <p className="text-sm font-medium text-[#f5f5f5]">
+                            {s.name}
+                          </p>
                           <Badge
                             variant="outline"
                             className={`border-0 text-[10px] ${
                               s.risk === "high"
                                 ? "bg-[#ef4444]/10 text-[#ef4444]"
                                 : s.risk === "medium"
-                                ? "bg-[#eab308]/10 text-[#eab308]"
-                                : "bg-[#22c55e]/10 text-[#22c55e]"
+                                  ? "bg-[#eab308]/10 text-[#eab308]"
+                                  : "bg-[#22c55e]/10 text-[#22c55e]"
                             }`}
                           >
                             {s.risk.toUpperCase()}
@@ -322,7 +419,7 @@ export default function DeployPage() {
                   </Button>
                 </div>
 
-                {!canDeploy && (
+                {!canDeploy && cb && (
                   <div className="flex items-center gap-2 rounded-lg bg-[#ef4444]/10 p-3 text-sm text-[#ef4444]">
                     <AlertTriangle className="h-4 w-4" />
                     {cb.level === "red"
@@ -347,7 +444,9 @@ export default function DeployPage() {
             <Card className="glass-panel card-gold-hover border-0">
               <CardContent className="flex flex-col items-center justify-center py-20">
                 <Loader2 className="mb-4 h-12 w-12 animate-spin text-[#d4af37]" />
-                <p className="text-lg font-medium text-[#f5f5f5]">Deploying Clone...</p>
+                <p className="text-lg font-medium text-[#f5f5f5]">
+                  Deploying Clone...
+                </p>
                 <p className="mt-2 text-sm text-[#888]">
                   Minting token on {chain} via {strategy} strategy
                 </p>
@@ -374,7 +473,9 @@ export default function DeployPage() {
                     <AlertTriangle className="mb-4 h-16 w-16 text-[#ef4444]" />
                   )}
                   <p className="text-xl font-semibold text-[#f5f5f5]">
-                    {result.success ? "Clone Deployed Successfully" : "Deployment Failed"}
+                    {result.success
+                      ? "Clone Deployed Successfully"
+                      : "Deployment Failed"}
                   </p>
                   <p className="mt-2 text-sm text-[#888]">
                     {result.success
@@ -387,19 +488,27 @@ export default function DeployPage() {
                   <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-[#888]">Token Name</span>
-                      <p className="font-medium text-[#f5f5f5]">{result.tokenName}</p>
+                      <p className="font-medium text-[#f5f5f5]">
+                        {result.tokenName}
+                      </p>
                     </div>
                     <div>
                       <span className="text-[#888]">Chain</span>
-                      <p className="font-medium text-[#f5f5f5] capitalize">{result.chain}</p>
+                      <p className="font-medium text-[#f5f5f5] capitalize">
+                        {result.chain}
+                      </p>
                     </div>
                     <div>
                       <span className="text-[#888]">Strategy</span>
-                      <p className="font-medium text-[#f5f5f5]">{result.strategy}</p>
+                      <p className="font-medium text-[#f5f5f5]">
+                        {result.strategy}
+                      </p>
                     </div>
                     <div>
                       <span className="text-[#888]">TX Hash</span>
-                      <p className="font-mono text-xs text-[#d4af37]">{result.txHash.slice(0, 16)}...</p>
+                      <p className="font-mono text-xs text-[#d4af37]">
+                        {result.txHash.slice(0, 16)}...
+                      </p>
                     </div>
                   </div>
                 )}

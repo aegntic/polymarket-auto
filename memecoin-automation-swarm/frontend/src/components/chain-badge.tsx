@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { Chain } from "@/lib/mock-data";
+import type { Chain } from "@/lib/types";
 
 const CHAIN_STYLES: Record<Chain, { bg: string; text: string; label: string }> = {
   solana: {

@@ -3,8 +3,31 @@
 export type Chain = "solana" | "base" | "bnb";
 export type Network = "devnet" | "testnet" | "mainnet";
 export type Classification = "clone" | "original" | "unknown";
-export type CloneStrategy = "substitution" | "homophone" | "suffix" | "unicode" | "other";
+export type CloneStrategy =
+  | "substitution"
+  | "homophone"
+  | "suffix"
+  | "unicode"
+  | "other";
 export type CircuitBreakerLevel = "green" | "yellow" | "orange" | "red";
+
+export interface AgentStatus {
+  id: string;
+  name: string;
+  status: "idle" | "active" | "busy" | "error";
+  last_heartbeat: string;
+  tasks_completed: number;
+  error_count: number;
+}
+
+export interface MonitoringMetrics {
+  profitability_score: number;
+  roi_3x_progress: number;
+  active_agents: number;
+  total_deployments: number;
+  success_rate: number;
+  average_profit_per_deployment: number;
+}
 
 export interface TokenObservation {
   token_address: string;
@@ -45,7 +68,11 @@ export interface EventEnvelope {
   payload: unknown;
 }
 
-export function createEnvelope(module: string, eventType: string, payload: unknown): EventEnvelope {
+export function createEnvelope(
+  module: string,
+  eventType: string,
+  payload: unknown,
+): EventEnvelope {
   return {
     timestamp: new Date().toISOString(),
     module,
@@ -101,7 +128,13 @@ export class MasError extends Error {
   fix?: string;
   docsUrl?: string;
 
-  constructor(opts: { code: string; message: string; cause?: string; fix?: string; docsUrl?: string }) {
+  constructor(opts: {
+    code: string;
+    message: string;
+    cause?: string;
+    fix?: string;
+    docsUrl?: string;
+  }) {
     super(opts.message);
     this.name = "MasError";
     this.code = opts.code;

@@ -4,11 +4,11 @@ import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import {
-  generateClassification,
+  API_BASE_URL,
   type Chain,
   type ClassificationResult,
-} from "@/lib/mock-data";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+} from "@/lib/api-collector";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,19 +23,86 @@ import { Separator } from "@/components/ui/separator";
 import { Search, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+interface ApiClassifyResponse {
+  success: boolean;
+  data: {
+    token_address: string;
+    chain: string;
+    classification: "clone" | "original";
+    confidence: number;
+    reasoning: string;
+    model_used: string;
+  };
+}
+
+function mapClassifyResponse(
+  raw: ApiClassifyResponse["data"],
+  address: string,
+  chain: Chain,
+): ClassificationResult {
+  const isClone = raw.classification === "clone";
+  return {
+    address: raw.token_address || address,
+    chain,
+    isClone,
+    confidence: raw.confidence,
+    similarityScore: isClone ? raw.confidence : 0,
+    reasoning: raw.reasoning
+      ? raw.reasoning.split("\n").filter(Boolean)
+      : ["No reasoning provided by the model."],
+    strategy: isClone ? "mirror-liquidity" : "none",
+    riskLevel: isClone
+      ? raw.confidence > 0.85
+        ? "high"
+        : "medium"
+      : "low",
+  };
+}
+
 export default function ClassifyPage() {
   const [address, setAddress] = useState("");
   const [chain, setChain] = useState<Chain>("solana");
   const [result, setResult] = useState<ClassificationResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleClassify = async () => {
     if (!address.trim()) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    const r = generateClassification(address, chain);
-    setResult(r);
-    setLoading(false);
+    setError(null);
+    setResult(null);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/classify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token_address: address,
+          chain,
+          name: "",
+          symbol: "",
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        setError(`API error: ${res.status} — ${text}`);
+        return;
+      }
+
+      const json: ApiClassifyResponse = await res.json();
+
+      if (!json.success || !json.data) {
+        setError(json.success === false ? "Classification failed." : "Unexpected response.");
+        return;
+      }
+
+      setResult(mapClassifyResponse(json.data, address, chain));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -83,6 +150,21 @@ export default function ClassifyPage() {
           </CardContent>
         </Card>
 
+        {/* Error */}
+        <AnimatePresence mode="wait">
+          {error && (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mb-6 rounded-lg bg-[#ef4444]/10 p-4 text-sm text-[#ef4444]"
+            >
+              {error}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Result */}
         <AnimatePresence mode="wait">
           {result && (
@@ -94,16 +176,16 @@ export default function ClassifyPage() {
               transition={{ duration: 0.4 }}
             >
               <Card className="glass-panel card-gold-hover border-0">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-3 text-lg">
+                <CardContent className="p-6">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="flex items-center gap-3 text-lg font-semibold text-[#f5f5f5]">
                       {result.isClone ? (
                         <AlertTriangle className="h-6 w-6 text-[#ef4444]" />
                       ) : (
                         <CheckCircle2 className="h-6 w-6 text-[#22c55e]" />
                       )}
                       {result.isClone ? "Clone Detected" : "Not a Clone"}
-                    </CardTitle>
+                    </h3>
                     <Badge
                       className={`border-0 ${
                         result.riskLevel === "high"
@@ -116,8 +198,6 @@ export default function ClassifyPage() {
                       {result.riskLevel.toUpperCase()} RISK
                     </Badge>
                   </div>
-                </CardHeader>
-                <CardContent>
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                     <div className="flex flex-col items-center justify-center">
                       <ConfidenceGauge value={result.confidence} />
@@ -181,7 +261,7 @@ export default function ClassifyPage() {
           )}
         </AnimatePresence>
 
-        {!result && !loading && (
+        {!result && !loading && !error && (
           <div className="flex flex-col items-center justify-center py-20 text-[#666]">
             <Search className="mb-4 h-16 w-16 opacity-20" />
             <p className="text-lg">Enter a token address to classify</p>

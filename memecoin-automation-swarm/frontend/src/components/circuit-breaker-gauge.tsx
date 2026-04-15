@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { CircuitBreakerLevel } from "@/lib/mock-data";
+import type { CircuitBreakerLevel } from "@/lib/types";
 
 const LEVEL_CONFIG: Record<
   CircuitBreakerLevel,

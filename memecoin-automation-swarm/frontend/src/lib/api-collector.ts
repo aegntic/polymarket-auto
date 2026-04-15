@@ -1,5 +1,5 @@
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -121,7 +121,7 @@ async function apiFetch<T>(
   }
 
   const data = await response.json();
-  return { success: true, data };
+  return data as ApiResponse<T>;
 }
 
 export async function getHealth(): Promise<ApiResponse<SystemHealth>> {
@@ -224,6 +224,18 @@ export async function getPerformanceReport(): Promise<
     avgMultiple: number;
     riskScore: number;
   }>("/analysis/performance");
+}
+
+export interface HourlyActivityPoint {
+  time: string;
+  classified: number;
+  clones: number;
+}
+
+export async function getHourlyActivity(): Promise<
+  ApiResponse<HourlyActivityPoint[]>
+> {
+  return apiFetch<HourlyActivityPoint[]>("/analysis/hourly");
 }
 
 export async function collectAllData(): Promise<{

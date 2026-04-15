@@ -1,17 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
-import { generateModules, type ModuleStatus } from "@/lib/mock-data";
+import { getModules, type ModuleStatus } from "@/lib/api-collector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Key, Link, Cpu, Eye, EyeOff } from "lucide-react";
-
-const INITIAL_MODULES = generateModules();
+import { Settings, Key, Link, Cpu, Eye, EyeOff, Server } from "lucide-react";
 
 interface ChainConfig {
   name: string;
@@ -25,23 +23,49 @@ const INITIAL_CHAINS: ChainConfig[] = [
   { name: "BNB", rpcUrl: "https://bsc-dataseed.binance.org", enabled: true },
 ];
 
-interface ApiKey {
+interface ServerConfigKey {
   name: string;
-  key: string;
-  masked: string;
+  envVar: string;
 }
 
-const INITIAL_KEYS: ApiKey[] = [
-  { name: "OpenRouter API Key", key: "sk-or-v1-xxxxx", masked: "sk-or-v1-••••••••••••" },
-  { name: "Helius RPC Key", key: "helius-xxxxx", masked: "helius-•••••••••" },
-  { name: "Anthropic API Key", key: "sk-ant-xxxxx", masked: "sk-ant-••••••••••••" },
+const SERVER_CONFIG_KEYS: ServerConfigKey[] = [
+  { name: "NVIDIA API Key", envVar: "NVIDIA_API_KEY" },
+  { name: "Redis URL", envVar: "REDIS_URL" },
+  { name: "ClickHouse URL", envVar: "CLICKHOUSE_URL" },
 ];
 
 export default function SettingsPage() {
-  const [modules, setModules] = useState<ModuleStatus[]>(INITIAL_MODULES);
+  const [modules, setModules] = useState<ModuleStatus[]>([]);
+  const [modulesLoading, setModulesLoading] = useState(true);
+  const [modulesError, setModulesError] = useState<string | null>(null);
   const [chains, setChains] = useState<ChainConfig[]>(INITIAL_CHAINS);
-  const [keys] = useState<ApiKey[]>(INITIAL_KEYS);
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getModules()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setModules(res.data);
+          setModulesError(null);
+        } else {
+          setModulesError(res.error ?? "Failed to load modules");
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setModulesError(err instanceof Error ? err.message : "Unknown error");
+      })
+      .finally(() => {
+        if (!cancelled) setModulesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggleModule = (id: string) => {
     setModules((prev) =>
@@ -63,6 +87,18 @@ export default function SettingsPage() {
     setVisibleKeys((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
+  if (modulesLoading) {
+    return (
+      <AppShell title="Settings" description="Loading...">
+        <div className="mx-auto max-w-3xl">
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d4af37]"></div>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell title="Settings" description="Chain configs, API keys, and module toggles">
       <div className="mx-auto max-w-3xl space-y-6">
@@ -75,6 +111,20 @@ export default function SettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
+            {modulesError && (
+              <div className="rounded-lg bg-[#ef4444]/10 p-3 mb-3">
+                <p className="text-xs text-[#ef4444]">
+                  Failed to load modules: {modulesError}
+                </p>
+              </div>
+            )}
+            {modules.length === 0 && !modulesError && (
+              <div className="rounded-lg bg-[rgba(255,255,255,0.02)] p-3">
+                <p className="text-xs text-[#888]">
+                  No modules found. Start the backend to populate module data.
+                </p>
+              </div>
+            )}
             {modules.map((mod) => (
               <div
                 key={mod.id}
@@ -150,34 +200,43 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* API Keys */}
+        {/* Server Configuration */}
         <Card className="glass-panel card-gold-hover border-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm font-medium text-[#888]">
-              <Key className="h-4 w-4 text-[#d4af37]" />
-              API Keys
+              <Server className="h-4 w-4 text-[#d4af37]" />
+              Server Configuration
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {keys.map((apiKey) => (
+            <p className="text-[11px] text-[#666] mb-2">
+              These environment variables are configured server-side. Values cannot be read from the client.
+            </p>
+            {SERVER_CONFIG_KEYS.map((configKey) => (
               <div
-                key={apiKey.name}
+                key={configKey.envVar}
                 className="flex items-center gap-3 rounded-lg bg-[rgba(255,255,255,0.02)] p-3"
               >
                 <Key className="h-4 w-4 shrink-0 text-[#666]" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-[#f5f5f5]">
-                    {apiKey.name}
+                    {configKey.name}
                   </p>
                   <p className="font-mono text-xs text-[#888]">
-                    {visibleKeys[apiKey.name] ? apiKey.key : apiKey.masked}
+                    {visibleKeys[configKey.envVar] ? configKey.envVar : "••••••••••••••••"}
                   </p>
                 </div>
+                <Badge
+                  variant="outline"
+                  className="border-0 text-[10px] bg-[#d4af37]/10 text-[#d4af37]"
+                >
+                  server-side
+                </Badge>
                 <button
-                  onClick={() => toggleKeyVisibility(apiKey.name)}
+                  onClick={() => toggleKeyVisibility(configKey.envVar)}
                   className="rounded p-1.5 text-[#666] transition-colors hover:text-[#d4af37]"
                 >
-                  {visibleKeys[apiKey.name] ? (
+                  {visibleKeys[configKey.envVar] ? (
                     <EyeOff className="h-4 w-4" />
                   ) : (
                     <Eye className="h-4 w-4" />

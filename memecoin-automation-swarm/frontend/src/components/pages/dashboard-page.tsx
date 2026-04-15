@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { ChainBadge } from "@/components/chain-badge";
@@ -26,16 +26,13 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { evaluateQuickDecision } from "@/lib/decision-engine";
-import { getSignals, getCircuitBreaker } from "@/lib/api-collector";
-import type { Chain } from "@/lib/mock-data";
-
-interface SignalData {
-  id: string;
-  address: string;
-  symbol: string;
-  chain: Chain;
-  score: number;
-}
+import {
+  getSignals,
+  getCircuitBreaker,
+  getAnalysisMetrics,
+  type TokenSignal,
+} from "@/lib/api-collector";
+import type { Chain } from "@/lib/types";
 
 interface CBState {
   level: string;
@@ -43,19 +40,74 @@ interface CBState {
   maxPerHour: number;
   clonesToday: number;
   maxPerDay: number;
+  llmCostToday: number;
+  llmBudgetPerDay: number;
+}
+
+interface ActivityBucket {
+  time: string;
+  classified: number;
+  clones: number;
+  cost: number;
+}
+
+/**
+ * Bucket signal timestamps into hourly slots for the last 24 hours.
+ * Each signal counts as one classification; signals with score >= 0.7 are
+ * also counted as clones.  Cost is estimated at $0.008 per classification
+ * (roughly the per-request cost of a small LLM call).
+ */
+function bucketSignals(signals: TokenSignal[]): ActivityBucket[] {
+  const COST_PER_CLASSIFICATION = 0.008;
+  const now = new Date();
+  const buckets: Map<string, ActivityBucket> = new Map();
+
+  // Initialise 24 empty buckets (0..23) from 24h ago to now.
+  for (let i = 23; i >= 0; i--) {
+    const t = new Date(now.getTime() - i * 3600000);
+    const key = `${t.getHours().toString().padStart(2, "0")}:00`;
+    buckets.set(key, { time: key, classified: 0, clones: 0, cost: 0 });
+  }
+
+  for (const sig of signals) {
+    const d = new Date(sig.detectedAt);
+    const ageMs = now.getTime() - d.getTime();
+    if (ageMs < 0 || ageMs > 24 * 3600000) continue;
+
+    const key = `${d.getHours().toString().padStart(2, "0")}:00`;
+    const bucket = buckets.get(key);
+    if (!bucket) continue;
+
+    bucket.classified += 1;
+    bucket.cost = Math.round((bucket.cost + COST_PER_CLASSIFICATION) * 1000) / 1000;
+    if (sig.score >= 0.7) {
+      bucket.clones += 1;
+    }
+  }
+
+  return Array.from(buckets.values());
 }
 
 export default function DashboardPage() {
   const [decision, setDecision] = useState<ReturnType<typeof evaluateQuickDecision> | null>(null);
-  const [signals, setSignals] = useState<SignalData[]>([]);
+  const [signals, setSignals] = useState<TokenSignal[]>([]);
   const [cb, setCB] = useState<CBState | null>(null);
   const [loading, setLoading] = useState({ signals: true, cb: true });
-  const [activity, setActivity] = useState<any[]>([]);
+  const [metricsData, setMetricsData] = useState<{
+    classifications: number;
+    cloneCount: number;
+    llmCostToday: number;
+    llmBudgetPerDay: number;
+  } | null>(null);
 
   useEffect(() => {
-    Promise.allSettled([getSignals({ limit: 8 }), getCircuitBreaker()])
+    Promise.allSettled([
+      getSignals({ limit: 50 }),
+      getCircuitBreaker(),
+      getAnalysisMetrics(),
+    ])
       .then((results) => {
-        const [signalsRes, cbRes] = results;
+        const [signalsRes, cbRes, metricsRes] = results;
 
         if (signalsRes.status === "fulfilled" && signalsRes.value?.success) {
           const data = signalsRes.value.data || [];
@@ -63,12 +115,12 @@ export default function DashboardPage() {
           setDecision(
             evaluateQuickDecision({
               volume24h: data.reduce(
-                (s: number, d: any) => s + (d.volume24h || 0),
+                (s, d) => s + (d.volume24h || 0),
                 0,
               ),
               age: "12",
               socialMentions: data.reduce(
-                (s: number, d: any) => s + ((d.score || 0) > 0.7 ? 1 : 0),
+                (s, d) => s + (d.score > 0.7 ? 1 : 0),
                 0,
               ),
               priceChange24h: 0.15,
@@ -77,7 +129,28 @@ export default function DashboardPage() {
         }
 
         if (cbRes.status === "fulfilled" && cbRes.value?.success) {
-          setCB(cbRes.value.data || null);
+          const cbData = cbRes.value.data || null;
+          setCB(cbData);
+
+          // Also extract clone count from circuit breaker if available.
+          if (cbData) {
+            setMetricsData((prev) => ({
+              classifications: prev?.classifications ?? 0,
+              cloneCount: cbData.clonesToday,
+              llmCostToday: cbData.llmCostToday,
+              llmBudgetPerDay: cbData.llmBudgetPerDay,
+            }));
+          }
+        }
+
+        if (metricsRes.status === "fulfilled" && metricsRes.value?.success && metricsRes.value.data) {
+          const m = metricsRes.value.data;
+          setMetricsData((prev) => ({
+            classifications: m.classifications,
+            cloneCount: prev?.cloneCount ?? 0,
+            llmCostToday: prev?.llmCostToday ?? 0,
+            llmBudgetPerDay: prev?.llmBudgetPerDay ?? 10,
+          }));
         }
 
         setLoading({ signals: false, cb: false });
@@ -85,16 +158,17 @@ export default function DashboardPage() {
       .catch(() => {
         setLoading({ signals: false, cb: false });
       });
-
-    setActivity(
-      Array.from({ length: 24 }, (_, i) => ({
-        time: `${i}:00`,
-        classified: Math.floor(Math.random() * 20) + 5,
-        clones: Math.floor(Math.random() * 5),
-        cost: Math.random() * 0.5 + 0.05,
-      })),
-    );
   }, []);
+
+  const activity = useMemo(() => bucketSignals(signals), [signals]);
+
+  const hasActivity = activity.some((b) => b.classified > 0);
+
+  // Derive stat card values from real data.
+  const tokensClassified = metricsData?.classifications ?? 0;
+  const clonesDetected = metricsData?.cloneCount ?? signals.filter((s) => s.score >= 0.7).length;
+  const llmCostToday = metricsData?.llmCostToday ?? 0;
+  const llmBudgetPerDay = metricsData?.llmBudgetPerDay ?? 10;
 
   if (loading.signals || loading.cb) {
     return (
@@ -105,16 +179,6 @@ export default function DashboardPage() {
       </AppShell>
     );
   }
-
-  const tokensClassified = activity.reduce(
-    (s, d) => s + (d.classified || 0),
-    0,
-  );
-  const clonesDetected = activity.reduce((s, d) => s + (d.clones || 0), 0);
-  const llmCost = activity.reduce(
-    (s, d) => s + parseFloat(String(d.cost || 0)),
-    0,
-  );
 
   return (
     <AppShell
@@ -129,21 +193,21 @@ export default function DashboardPage() {
         <StatCard
           label="Tokens Classified"
           value={tokensClassified.toLocaleString()}
-          sublabel="+12% vs yesterday"
-          trend="up"
+          sublabel={`${activity.reduce((s, b) => s + b.classified, 0)} in last 24h`}
+          trend={tokensClassified > 0 ? "up" : "neutral"}
           icon={<Search className="h-5 w-5" />}
         />
         <StatCard
           label="Clones Detected"
           value={clonesDetected.toLocaleString()}
-          sublabel="3 high-risk in last hour"
-          trend="up"
+          sublabel={`${signals.filter((s) => s.score >= 0.7).length} high-risk signals`}
+          trend={clonesDetected > 0 ? "up" : "neutral"}
           icon={<Copy className="h-5 w-5" />}
         />
         <StatCard
           label="LLM Cost Today"
-          value={`$${llmCost.toFixed(2)}`}
-          sublabel={`of $10 daily budget`}
+          value={`$${llmCostToday.toFixed(2)}`}
+          sublabel={`of $${llmBudgetPerDay.toFixed(0)} daily budget`}
           trend="neutral"
           icon={<DollarSign className="h-5 w-5" />}
         />
@@ -171,60 +235,66 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={activity}>
-                <defs>
-                  <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#d4af37" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#d4af37" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="greenGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#22c55e" stopOpacity={0.2} />
-                    <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="rgba(255,255,255,0.04)"
-                />
-                <XAxis
-                  dataKey="time"
-                  tick={{ fill: "#666", fontSize: 11 }}
-                  axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fill: "#666", fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <RechartsTooltip
-                  contentStyle={{
-                    backgroundColor: "#1a1a1a",
-                    border: "1px solid rgba(212,175,55,0.15)",
-                    borderRadius: 8,
-                    color: "#f5f5f5",
-                    fontSize: 12,
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="classified"
-                  stroke="#d4af37"
-                  strokeWidth={2}
-                  fill="url(#goldGrad)"
-                  name="Classified"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="clones"
-                  stroke="#22c55e"
-                  strokeWidth={2}
-                  fill="url(#greenGrad)"
-                  name="Clones"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {!hasActivity ? (
+              <div className="flex items-center justify-center h-[260px] text-sm text-[#666]">
+                Run live ingest to populate activity data
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={activity}>
+                  <defs>
+                    <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#d4af37" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#d4af37" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="greenGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#22c55e" stopOpacity={0.2} />
+                      <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.04)"
+                  />
+                  <XAxis
+                    dataKey="time"
+                    tick={{ fill: "#666", fontSize: 11 }}
+                    axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: "#666", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: "#1a1a1a",
+                      border: "1px solid rgba(212,175,55,0.15)",
+                      borderRadius: 8,
+                      color: "#f5f5f5",
+                      fontSize: 12,
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="classified"
+                    stroke="#d4af37"
+                    strokeWidth={2}
+                    fill="url(#goldGrad)"
+                    name="Classified"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="clones"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    fill="url(#greenGrad)"
+                    name="Clones"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>

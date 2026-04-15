@@ -1,7 +1,8 @@
 import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
 import type { TokenObservation, ClassificationResult, Classification } from "../shared/types";
 import { getRedis, incrFloat, getCounter } from "../shared/redis";
+
+const NIM_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
 const CLASSIFICATION_PROMPT = `You are a memecoin clone detection classifier. Given token data, classify it as:
 - "clone": if the token appears to be copying/impersonating another known token
@@ -16,22 +17,26 @@ interface LLMClassification {
   reasoning: string;
 }
 
+// Model chain — primary, fallback, rule-based
+const MODEL_CHAIN = [
+  "meta/llama-4-maverick-17b-128e-instruct",
+  "deepseek-ai/deepseek-v3.2",
+  "meta/llama-3.3-70b-instruct",
+] as const;
+
 export class OracleClassifier {
-  private openai: OpenAI | null = null;
-  private anthropic: Anthropic | null = null;
+  private client: OpenAI;
   private dailyBudget: number;
   private modelChain: string[];
 
   constructor(opts?: { dailyBudget?: number; modelChain?: string[] }) {
     this.dailyBudget = opts?.dailyBudget ?? 10.0;
-    this.modelChain = opts?.modelChain ?? ["gpt-4o", "claude-sonnet-4-20250514", "rule-based"];
+    this.modelChain = opts?.modelChain ?? [...MODEL_CHAIN];
 
-    if (process.env.OPENAI_API_KEY) {
-      this.openai = new OpenAI();
-    }
-    if (process.env.ANTHROPIC_API_KEY) {
-      this.anthropic = new Anthropic();
-    }
+    this.client = new OpenAI({
+      baseURL: NIM_BASE_URL,
+      apiKey: process.env.NVIDIA_API_KEY || "nvapi-no-key",
+    });
   }
 
   async checkBudget(): Promise<boolean> {
@@ -41,7 +46,11 @@ export class OracleClassifier {
   }
 
   async classify(token: TokenObservation): Promise<ClassificationResult> {
-    if (!await this.checkBudget()) {
+    if (!process.env.NVIDIA_API_KEY) {
+      return this.ruleBasedFallback(token);
+    }
+
+    if (!(await this.checkBudget())) {
       return this.ruleBasedFallback(token);
     }
 
@@ -54,73 +63,58 @@ export class OracleClassifier {
       holders: token.holder_count_1h,
     });
 
-    // Try GPT-4o first
-    if (this.openai) {
+    // Try each model in the chain
+    for (const model of this.modelChain) {
       try {
-        const result = await this.callOpenAI(tokenData);
-        await incrFloat(`mas:risk:llm_cost:${new Date().toISOString().slice(0, 10)}`, 0.003);
+        const result = await this.callNIM(model, tokenData);
+        // NVIDIA free tier — cost is $0, but track for budget awareness
+        await incrFloat(
+          `mas:risk:llm_cost:${new Date().toISOString().slice(0, 10)}`,
+          0.0001, // negligible cost, tracks usage volume
+        );
         return {
           token_address: token.token_address,
           chain: token.chain,
           classification: result.classification,
           confidence: result.confidence,
           reasoning: result.reasoning,
-          model_used: "gpt-4o",
+          model_used: model,
           classified_at: new Date().toISOString(),
-          cost_usd: 0.003,
+          cost_usd: 0,
         };
       } catch {
-        // fall through
+        // Model unavailable, try next in chain
+        continue;
       }
     }
 
-    // Try Claude
-    if (this.anthropic) {
-      try {
-        const result = await this.callAnthropic(tokenData);
-        await incrFloat(`mas:risk:llm_cost:${new Date().toISOString().slice(0, 10)}`, 0.003);
-        return {
-          token_address: token.token_address,
-          chain: token.chain,
-          classification: result.classification,
-          confidence: result.confidence,
-          reasoning: result.reasoning,
-          model_used: "claude-sonnet",
-          classified_at: new Date().toISOString(),
-          cost_usd: 0.003,
-        };
-      } catch {
-        // fall through
-      }
-    }
-
-    // Fallback to rule-based
     return this.ruleBasedFallback(token);
   }
 
-  private async callOpenAI(data: string): Promise<LLMClassification> {
-    const resp = await this.openai!.chat.completions.create({
-      model: "gpt-4o",
+  private async callNIM(model: string, data: string): Promise<LLMClassification> {
+    const resp = await this.client.chat.completions.create({
+      model,
       messages: [
         { role: "system", content: CLASSIFICATION_PROMPT },
         { role: "user", content: `Classify this token: ${data}` },
       ],
-      response_format: { type: "json_object" },
       max_tokens: 200,
+      temperature: 0.1,
     });
-    return JSON.parse(resp.choices[0]?.message?.content ?? "{}") as LLMClassification;
-  }
 
-  private async callAnthropic(data: string): Promise<LLMClassification> {
-    const resp = await this.anthropic!.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 200,
-      messages: [
-        { role: "user", content: `${CLASSIFICATION_PROMPT}\n\nClassify this token: ${data}` },
-      ],
-    });
-    const text = resp.content[0]?.type === "text" ? resp.content[0].text : "{}";
-    return JSON.parse(text) as LLMClassification;
+    const content = resp.choices[0]?.message?.content ?? "{}";
+
+    // Try direct JSON parse
+    try {
+      return JSON.parse(content) as LLMClassification;
+    } catch {
+      // Extract JSON from markdown code blocks if present
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]) as LLMClassification;
+      }
+      throw new Error(`Failed to parse LLM response: ${content.slice(0, 100)}`);
+    }
   }
 
   private ruleBasedFallback(token: TokenObservation): ClassificationResult {
@@ -129,7 +123,7 @@ export class OracleClassifier {
       chain: token.chain,
       classification: "unknown",
       confidence: 0.0,
-      reasoning: "Rule-based fallback: no LLM available",
+      reasoning: "Rule-based fallback: no NVIDIA API key configured",
       model_used: "rule-based",
       classified_at: new Date().toISOString(),
       cost_usd: 0,

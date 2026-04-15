@@ -16,7 +16,6 @@
     "ioredis": "^5.4.0",
     "@clickhouse/client": "^1.8.0",
     "openai": "^4.77.0",
-    "@anthropic-ai/sdk": "^0.36.0",
     "zod": "^3.24.0",
     "dotenv": "^16.4.0"
   },
