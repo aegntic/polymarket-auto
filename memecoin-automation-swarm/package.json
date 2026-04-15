@@ -11,10 +11,13 @@
     "fmt": "bunx prettier --write 'src/ts/**/*.ts'"
   },
   "dependencies": {
-    "hono": "^4.7.0",
     "@hono/node-server": "^1.13.0",
+    "@hono/node-server": "^1.13.0",
+    "@solana/spl-token": "^0.4.0",
+    "@solana/web3.js": "^1.107.0",
+    "@types/node": "^20.10.0",
+    "hono": "^4.7.0",
     "ioredis": "^5.4.0",
-    "@clickhouse/client": "^1.8.0",
     "openai": "^4.77.0",
     "zod": "^3.24.0",
     "dotenv": "^16.4.0"

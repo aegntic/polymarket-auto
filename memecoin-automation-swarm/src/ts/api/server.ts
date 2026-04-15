@@ -7,10 +7,29 @@ import * as ch from "../shared/clickhouse";
 import { MasError, ERROR_CODES } from "../shared/types";
 import type { Classification, ClassificationResult, TokenObservation } from "../shared/types";
 import { OracleClassifier } from "../oracle/classifier";
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import {
+  TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountInstruction,
+  createMint,
+  getAssociatedTokenAddress,
+  getOrCreateAssociatedTokenAccount,
+  mintTo,
+} from "@solana/spl-token";
 
 const app = new Hono();
 
 app.use("*", cors());
+
+// ---------------------------------------------------------------------------
+// Solana wallet configuration
+// ---------------------------------------------------------------------------
+const connection = new Connection(process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com", "confirmed");
+const DEPLOYER_WALLET_KEY = process.env.DEPLOYER_PRIVATE_KEY;
+
+if (!DEPLOYER_WALLET_KEY) {
+  console.warn("WARNING: DEPLOYER_PRIVATE_KEY not set. Deploy endpoint will return simulation only.");
+}
 
 // ---------------------------------------------------------------------------
 // Health check
@@ -30,6 +49,122 @@ app.get("/health", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Deploy a bait token on Solana
+// ---------------------------------------------------------------------------
+app.post("/deploy", async (c) => {
+  const body = await c.req.json<{
+    name?: string;
+    symbol?: string;
+    supply?: number;
+    decimals?: number;
+  }>();
+
+  const name = body.name || "BaitToken";
+  const symbol = body.symbol || "BAIT";
+  const supply = body.supply || 1_000_000_000;
+  const decimals = body.decimals || 9;
+
+  // Return simulation if no wallet configured
+  if (!DEPLOYER_WALLET_KEY) {
+    return c.json({
+      success: true,
+      simulation: true,
+      message: "No deployer wallet configured. Returning simulation data.",
+      data: {
+        id: `sim-${Date.now()}`,
+        tokenName: `${symbol}-${Date.now().toString(36).slice(-6)}`,
+        mintAddress: `Sim11111111111111111111111111111111${Date.now().toString(36).slice(-8)}`,
+        chain: "solana",
+        strategy: "substitution",
+        status: "pending",
+        deployedAt: new Date().toISOString(),
+        txHash: "SimTx" + Date.now().toString(36),
+        pnl: 0,
+        costUSD: 0.0005,
+      },
+    });
+  }
+
+  try {
+    const payer = Keypair.fromSecretKey(new Uint8Array(JSON.parse(DEPLOYER_WALLET_KEY)));
+    const mintKeypair = Keypair.generate();
+
+    // Create associated token account for payer
+    const payerTokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mintKeypair.publicKey,
+      payer.publicKey
+    );
+
+    const tx1 = new Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        payer.publicKey,
+        payerTokenAccount.address,
+        payer.publicKey,
+        mintKeypair.publicKey
+      )
+    );
+
+    // Fund the wallet if needed (optional - can be pre-funded)
+    // const airdropSig = await connection.requestAirdrop(payer.publicKey, 0.1 * LAMPORTS_PER_SOL);
+    // await connection.confirmTransaction(airdropSig);
+
+    // Create the mint
+    const createMintTx = new Transaction().add(
+      createMint(
+        connection,
+        payer,
+        mintKeypair.publicKey,
+        payer.publicKey,
+        decimals,
+        TOKEN_PROGRAM_ID
+      )
+    );
+
+    // Mint tokens to payer's associated token account
+    const mintTx = new Transaction().add(
+      mintTo(
+        connection,
+        payer,
+        mintKeypair.publicKey,
+        payerTokenAccount.address,
+        payer,
+        supply * Math.pow(10, decimals),
+        []
+      )
+    );
+
+    // Send transactions
+    const createSig = await sendAndConfirmTransaction(connection, createMintTx, [payer, mintKeypair]);
+    const mintSig = await sendAndConfirmTransaction(connection, mintTx, [payer, mintKeypair]);
+
+    return c.json({
+      success: true,
+      simulation: false,
+      data: {
+        id: `deploy-${Date.now()}`,
+        tokenName: `${symbol}-${Date.now().toString(36).slice(-6)}`,
+        mintAddress: mintKeypair.publicKey.toString(),
+        chain: "solana",
+        strategy: "substitution",
+        status: "deployed",
+        deployedAt: new Date().toISOString(),
+        txHash: mintSig,
+        pnl: 0,
+        costUSD: 0.0005,
+      },
+    });
+  } catch (err) {
+    console.error("Deployment error:", err);
+    return c.json(
+      { error: { code: "MAS_E8002", message: "Deployment failed", fix: "Check wallet funding and RPC connectivity" } },
+      500
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Signals — recent token observations from ClickHouse
 // ---------------------------------------------------------------------------
 app.get("/signals", async (c) => {
@@ -42,7 +177,6 @@ app.get("/signals", async (c) => {
   }
 
   try {
-    // Join observations with classifications to get real scores
     const rows = await ch.query<{
       token_address: string;
       chain: string;
@@ -54,24 +188,23 @@ app.get("/signals", async (c) => {
       classification: string | null;
     }>(
       `SELECT
-         o.token_address, o.chain, o.name, o.symbol, o.first_seen_at, o.source,
-         c.confidence, c.classification
-       FROM clonet.token_observations o
-       LEFT JOIN (
-         SELECT token_address, chain, confidence, classification,
-                ROW_NUMBER() OVER (PARTITION BY token_address, chain ORDER BY classified_at DESC) as rn
-         FROM clonet.classifications
-       ) c ON o.token_address = c.token_address AND o.chain = c.chain AND c.rn = 1
-       WHERE 1=1 ${chainFilter}
-       ORDER BY o.first_seen_at DESC
-       LIMIT ${limit}`,
+          o.token_address, o.chain, o.name, o.symbol, o.first_seen_at, o.source,
+          c.confidence, c.classification
+        FROM clonet.token_observations o
+        LEFT JOIN (
+          SELECT token_address, chain, confidence, classification,
+                 ROW_NUMBER() OVER (PARTITION BY token_address, chain ORDER BY classified_at DESC) as rn
+          FROM clonet.classifications
+        ) c ON o.token_address = c.token_address AND o.chain = c.chain AND c.rn = 1
+        WHERE 1=1 ${chainFilter}
+        ORDER BY o.first_seen_at DESC
+        LIMIT ${limit}`,
     );
 
     const now = Date.now();
     const signals = rows.map((r, i) => {
       const createdAt = r.first_seen_at ? new Date(r.first_seen_at.replace(" ", "T")).getTime() : now;
       const ageHours = Math.max(0, Math.floor((now - createdAt) / 3600000));
-      // Derive score from classification confidence, or use 0 if unclassified
       const score = r.confidence != null && r.classification === "clone"
         ? Math.round(r.confidence * 100) / 100
         : r.confidence != null
@@ -94,7 +227,6 @@ app.get("/signals", async (c) => {
 
     return c.json({ success: true, data: signals });
   } catch (err) {
-    // ClickHouse empty or unreachable — return empty set
     return c.json({ success: true, data: [] });
   }
 });
@@ -118,7 +250,7 @@ app.get("/circuit-breaker", async (c) => {
   const maxPerDay = 200;
   const budgetPerDay = 10;
 
-  let level: "green" | "yellow" | "orange" | "red" = "green";
+  let level = "green";
   if (hourly >= maxPerHour * 0.9 || daily >= maxPerDay * 0.9) level = "red";
   else if (hourly >= maxPerHour * 0.7 || daily >= maxPerDay * 0.7) level = "orange";
   else if (hourly >= maxPerHour * 0.4 || daily >= maxPerDay * 0.4) level = "yellow";
@@ -231,7 +363,6 @@ app.get("/modules", async (c) => {
     { id: "economy", name: "ECONOMY", enabled: true, status: "running" },
   ];
 
-  // Check Redis for actual module heartbeats
   const r = redis.getRedis();
   const enriched = await Promise.all(
     modules.map(async (m) => {
@@ -262,7 +393,6 @@ app.post("/classify", async (c) => {
     );
   }
 
-  // Check circuit breaker
   const hourlyKey = `mas:risk:hourly:${new Date().toISOString().slice(0, 13)}`;
   const hourlyCount = await redis.getCounter(hourlyKey);
   if (hourlyCount >= 40) {
@@ -272,7 +402,6 @@ app.post("/classify", async (c) => {
     );
   }
 
-  // Build token observation from request + ClickHouse
   let observation: TokenObservation = {
     token_address: body.token_address,
     chain: body.chain as import("../shared/types").Chain,
@@ -291,10 +420,8 @@ app.post("/classify", async (c) => {
     // ClickHouse empty or unreachable
   }
 
-  // Classify via NVIDIA NIM (Llama 4 / DeepSeek / Llama 3.3)
   const result = await oracle.classify(observation);
 
-  // Persist to ClickHouse
   try {
     await ch.insertClassifications([{
       token_address: result.token_address,
@@ -318,14 +445,11 @@ app.get("/analysis/metrics", async (c) => {
   try {
     const [sigCount, depCount, classCount] = await Promise.all([
       ch.query<{ count: string }>("SELECT count() as count FROM clonet.token_observations")
-        .then((r) => parseInt(r[0]?.count || "0", 10))
-        .catch(() => 0),
+        .then((r) => parseInt(r[0]?.count || "0", 10)).catch(() => 0),
       ch.query<{ count: string }>("SELECT count() as count FROM clonet.clone_deployments")
-        .then((r) => parseInt(r[0]?.count || "0", 10))
-        .catch(() => 0),
+        .then((r) => parseInt(r[0]?.count || "0", 10)).catch(() => 0),
       ch.query<{ count: string }>("SELECT count() as count FROM clonet.classifications")
-        .then((r) => parseInt(r[0]?.count || "0", 10))
-        .catch(() => 0),
+        .then((r) => parseInt(r[0]?.count || "0", 10)).catch(() => 0),
     ]);
 
     return c.json({
@@ -349,20 +473,19 @@ app.get("/analysis/performance", async (c) => {
 
 app.get("/analysis/hourly", async (c) => {
   try {
-    // Get classification counts grouped by hour for last 24h
     const rows = await ch.query<{
       hour: string;
       total: string;
       clones: string;
     }>(
       `SELECT
-         formatDateTime(classified_at, '%Y-%m-%d %H:00:00') as hour,
-         count() as total,
-         countIf(classification = 'clone') as clones
-       FROM clonet.classifications
-       WHERE classified_at >= now() - INTERVAL 24 HOUR
-       GROUP BY hour
-       ORDER BY hour ASC`,
+          formatDateTime(classified_at, '%Y-%m-%d %H:00:00') as hour,
+          count() as total,
+          countIf(classification = 'clone') as clones
+        FROM clonet.classifications
+        WHERE classified_at >= now() - INTERVAL 24 HOUR
+        GROUP BY hour
+        ORDER BY hour ASC`,
     );
 
     const data = rows.map((r) => ({
@@ -378,76 +501,93 @@ app.get("/analysis/hourly", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Deploy endpoint
+// Deploy endpoint (with actual Solana deployment)
 // ---------------------------------------------------------------------------
 app.post("/deploy", async (c) => {
-  const body = await c.req.json();
-  return c.json({
-    success: true,
-    data: {
-      id: `dep-${Date.now()}`,
-      tokenName: body.name || "unknown",
-      chain: body.chain || "solana",
-      strategy: body.strategy || "substitution",
-      status: "pending",
-      deployedAt: new Date().toISOString(),
-      txHash: "",
-      pnl: 0,
-    },
-  });
-});
+  const body = await c.req.json<{
+    name?: string;
+    symbol?: string;
+    supply?: number;
+    decimals?: number;
+  }>();
 
-// ---------------------------------------------------------------------------
-// Dataset export
-// ---------------------------------------------------------------------------
-app.get("/dataset/export", async (c) => {
-  const chain = c.req.query("chain") || "all";
-  const isCloneParam = c.req.query("isClone");
-  const limit = parseInt(c.req.query("limit") || "1000", 10);
+  const name = body.name || "BaitToken";
+  const symbol = body.symbol || "BAIT";
+  const supply = body.supply || 1_000_000_000;
+  const decimals = body.decimals || 9;
 
-  let chainFilter = "";
-  if (chain !== "all") {
-    chainFilter = `AND chain = '${chain}'`;
-  }
-  let cloneFilter = "";
-  if (isCloneParam === "true") {
-    cloneFilter = `AND classification = 'clone'`;
-  } else if (isCloneParam === "false") {
-    cloneFilter = `AND classification != 'clone'`;
+  if (!DEPLOYER_WALLET_KEY) {
+    return c.json({
+      success: true,
+      simulation: true,
+      message: "No deployer wallet configured. Returning simulation data.",
+      data: {
+        id: `sim-${Date.now()}`,
+        tokenName: `${symbol}-${Date.now().toString(36).slice(-6)}`,
+        mintAddress: `Sim11111111111111111111111111111111${Date.now().toString(36).slice(-8)}`,
+        chain: "solana",
+        strategy: "substitution",
+        status: "pending",
+        deployedAt: new Date().toISOString(),
+        txHash: "SimTx" + Date.now().toString(36),
+        pnl: 0,
+        costUSD: 0.0005,
+      },
+    });
   }
 
   try {
-    const rows = await ch.query<{
-      token_address: string;
-      chain: string;
-      classification: string;
-      confidence: number;
-      original_token: string | null;
-      reasoning: string;
-      classified_at: string;
-    }>(
-      `SELECT token_address, chain, classification, confidence, original_token, reasoning, classified_at
-       FROM clonet.classifications
-       WHERE 1=1 ${chainFilter} ${cloneFilter}
-       ORDER BY classified_at DESC
-       LIMIT ${limit}`,
+    const payer = Keypair.fromSecretKey(new Uint8Array(JSON.parse(DEPLOYER_WALLET_KEY)));
+    const mintKeypair = Keypair.generate();
+
+    const payerTokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mintKeypair.publicKey,
+      payer.publicKey,
     );
 
-    // Return as DatasetRow shape
-    const data = rows.map((r, i) => ({
-      id: `row-${i}`,
-      address: r.token_address,
-      chain: r.chain,
-      isClone: r.classification === "clone",
-      confidence: r.confidence || 0,
-      originalToken: r.original_token || "N/A",
-      similarity: r.classification === "clone" ? r.confidence : 0,
-      classifiedAt: r.classified_at,
-    }));
+    const createMintTx = new Transaction().add(
+      createMint(connection, payer, mintKeypair.publicKey, payer.publicKey, decimals, TOKEN_PROGRAM_ID),
+    );
 
-    return c.json({ success: true, data });
-  } catch {
-    return c.json({ success: true, data: [] });
+    const mintTx = new Transaction().add(
+      mintTo(
+        connection,
+        payer,
+        mintKeypair.publicKey,
+        payerTokenAccount.address,
+        payer,
+        supply * Math.pow(10, decimals),
+        [],
+      ),
+    );
+
+    const createSig = await sendAndConfirmTransaction(connection, createMintTx, [payer, mintKeypair]);
+    const mintSig = await sendAndConfirmTransaction(connection, mintTx, [payer, mintKeypair]);
+
+    return c.json({
+      success: true,
+      simulation: false,
+      data: {
+        id: `deploy-${Date.now()}`,
+        tokenName: `${symbol}-${Date.now().toString(36).slice(-6)}`,
+        mintAddress: mintKeypair.publicKey.toString(),
+        chain: "solana",
+        strategy: "substitution",
+        status: "deployed",
+        deployedAt: new Date().toISOString(),
+        txHash: mintSig,
+        pnl: 0,
+        costUSD: 0.0005,
+      },
+    });
+  } catch (err) {
+    console.error("Deployment error:", err);
+    return c.json(
+      { error: { code: "MAS_E8002", message: "Deployment failed", fix: "Check wallet funding and RPC connectivity" } },
+      500,
+    );
   }
 });
 
@@ -466,4 +606,4 @@ app.onError((err, c) => {
 // ---------------------------------------------------------------------------
 const port = parseInt(process.env.PORT || "8080", 10);
 console.log(`MAS API starting on port ${port}`);
-serve({ fetch: app.fetch, port });
+service serve({ fetch: app.fetch, port });
