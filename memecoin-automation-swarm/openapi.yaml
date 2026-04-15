@@ -1,0 +1,290 @@
+openapi: 3.1.0
+info:
+  title: Memecoin Clone Detection API
+  version: 0.1.0
+  description: Blue-team research platform for memecoin clone detection
+  license:
+    name: Custom Research License
+    url: https://github.com/aegntic/memecoin-automation-swarm/LICENSE
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Service health check
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: healthy
+                version: "0.1.0"
+                components:
+                  redis: connected
+                  clickhouse: connected
+                  recon: streaming
+                  uptime_seconds: 3600
+
+  /classify:
+    post:
+      summary: Classify a token
+      description: Returns clone probability, original token match, and feature evidence
+      operationId: classifyToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClassifyRequest"
+            examples:
+              solana:
+                value:
+                  token_address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+                  chain: solana
+              with_options:
+                value:
+                  token_address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+                  chain: solana
+                  include_features: true
+                  include_reasoning: true
+      responses:
+        "200":
+          description: Classification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassifyResponse"
+              example:
+                token_address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+                chain: solana
+                classification: original
+                confidence: 0.95
+                clone_probability: 0.05
+                original_token: null
+                features:
+                  name_levenshtein: 0
+                  deployment_delay_seconds: 0
+                  holder_count_1min: 150
+                  unique_buyer_ratio: 0.85
+                reasoning: "Established token with high holder count and organic trading patterns"
+                methods_used: ["rule_based", "ml", "oracle"]
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Classification service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /dataset/export:
+    get:
+      summary: Export CloneNet dataset
+      operationId: exportDataset
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [jsonl, parquet]
+            default: jsonl
+        - name: chain
+          in: query
+          schema:
+            type: string
+            enum: [solana, base, bnb, all]
+            default: all
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Only records after this timestamp
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100000
+            default: 10000
+      responses:
+        "200":
+          description: Dataset export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetExport"
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, version, components, uptime_seconds]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        components:
+          type: object
+          additionalProperties:
+            type: string
+        uptime_seconds:
+          type: integer
+
+    ClassifyRequest:
+      type: object
+      required: [token_address, chain]
+      properties:
+        token_address:
+          type: string
+          description: On-chain token address
+        chain:
+          type: string
+          enum: [solana, base, bnb]
+        include_features:
+          type: boolean
+          default: false
+        include_reasoning:
+          type: boolean
+          default: false
+
+    ClassifyResponse:
+      type: object
+      required: [token_address, chain, classification, confidence, clone_probability, methods_used]
+      properties:
+        token_address:
+          type: string
+        chain:
+          type: string
+        classification:
+          type: string
+          enum: [clone, original, unknown]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        clone_probability:
+          type: number
+          minimum: 0
+          maximum: 1
+        original_token:
+          type: object
+          nullable: true
+          properties:
+            address:
+              type: string
+            name:
+              type: string
+        features:
+          type: object
+          description: Extracted features (when include_features=true)
+          properties:
+            name_levenshtein:
+              type: integer
+            symbol_levenshtein:
+              type: integer
+            deployment_delay_seconds:
+              type: number
+            holder_count_1min:
+              type: integer
+            unique_buyer_ratio:
+              type: number
+            top_10_holder_pct:
+              type: number
+        reasoning:
+          type: string
+          description: Human-readable explanation (when include_reasoning=true)
+        methods_used:
+          type: array
+          items:
+            type: string
+            enum: [rule_based, ml, oracle]
+
+    DatasetExport:
+      type: object
+      required: [dataset_name, version, record_count, records]
+      properties:
+        dataset_name:
+          type: string
+        version:
+          type: string
+        record_count:
+          type: integer
+        exported_at:
+          type: string
+          format: date-time
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/CloneNetRecord"
+
+    CloneNetRecord:
+      type: object
+      required: [id, token_address, chain, timestamp, is_clone, clone_confidence]
+      properties:
+        id:
+          type: string
+          format: uuid
+        token_address:
+          type: string
+        chain:
+          type: string
+          enum: [solana, base, bnb]
+        timestamp:
+          type: string
+          format: date-time
+        is_clone:
+          type: boolean
+        original_token_address:
+          type: string
+          nullable: true
+        clone_confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          pattern: "^MAS_E[0-9]{4}$"
+        message:
+          type: string
+        cause:
+          type: string
+        fix:
+          type: string
+        docs_url:
+          type: string
+          format: uri

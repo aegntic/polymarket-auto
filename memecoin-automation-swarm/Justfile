@@ -1,0 +1,81 @@
+# Memecoin Automation Swarm — Task Runner
+
+# Setup (first time)
+setup:
+    @echo "Setting up memecoin-automation-swarm..."
+    cp -n .env.example .env 2>/dev/null || true
+    docker compose -f docker/docker-compose.yml up -d
+    @echo "Waiting for services..."
+    sleep 5
+    docker exec memecoin-clickhouse-1 clickhouse-client --queries-file /docker-entrypoint-initdb.d/01-schema.sql 2>/dev/null || true
+    cargo build
+    bun install
+    @echo "Setup complete. Run 'just dev' to start."
+
+# Development mode
+dev:
+    @echo "Starting development environment..."
+    docker compose -f docker/docker-compose.yml up -d 2>/dev/null || true
+    cargo build --release &
+    bun run dev &
+    wait
+
+# Build everything
+build:
+    cargo build --release
+    bun run build
+
+# Run all tests
+test:
+    cargo test
+    bun test
+
+# Run Rust tests only
+test-rust:
+    cargo test
+
+# Run TypeScript tests only
+test-ts:
+    bun test
+
+# Lint everything
+lint:
+    cargo clippy -- -D warnings
+    cargo fmt -- --check
+    bun run lint
+    bun run typecheck
+
+# Format code
+fmt:
+    cargo fmt
+    bun run fmt
+
+# Clean build artifacts
+clean:
+    cargo clean
+    rm -rf node_modules dist
+
+# Docker management
+docker-up:
+    docker compose -f docker/docker-compose.yml up -d
+
+docker-down:
+    docker compose -f docker/docker-compose.yml down
+
+docker-logs:
+    docker compose -f docker/docker-compose.yml logs -f
+
+# ClickHouse
+ch-schema:
+    docker exec -i memecoin-clickhouse-1 clickhouse-client --queries-file /docker-entrypoint-initdb.d/01-schema.sql
+
+ch-query sql:
+    docker exec -i memecoin-clickhouse-1 clickhouse-client --query "{{sql}}"
+
+# Export dataset
+export format='jsonl' chain='all':
+    bun run src/ts/dataset/export.ts --format {{format}} --chain {{chain}}
+
+# Deploy a clone (devnet)
+deploy-clone chain='solana' strategy='substitution':
+    cargo run -p mint -- --chain {{chain}} --strategy {{strategy}} --network devnet

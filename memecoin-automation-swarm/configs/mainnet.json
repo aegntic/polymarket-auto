@@ -1,0 +1,17 @@
+{
+  "chain": "solana",
+  "network": "mainnet-beta",
+  "rpc_url_env": "HELIUS_API_KEY",
+  "rpc_url_template": "https://mainnet.helius-rpc.com/?api-key={key}",
+  "geyser_enabled": true,
+  "geyser_endpoint_env": "TRITON_ONE_URL",
+  "commitment": "confirmed",
+  "max_clone_per_day": 50,
+  "bait_tokens_enabled": true,
+  "circuit_breaker": {
+    "yellow_threshold_per_hour": 30,
+    "orange_threshold_per_hour": 40,
+    "red_on_unauthorized": true,
+    "mainnet_clone_limit_per_day": 10
+  }
+}

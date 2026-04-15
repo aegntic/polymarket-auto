@@ -1,0 +1,36 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Node/Bun
+node_modules/
+bun.lock
+dist/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker volumes
+docker/data/
+docker/logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keys (NEVER commit)
+*.pem
+*.key
+*secret*
+credentials.json

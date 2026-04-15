@@ -1,0 +1,14 @@
+{
+  "chain": "solana",
+  "network": "testnet",
+  "rpc_url_env": "HELIUS_API_KEY",
+  "rpc_url_template": "https://testnet.helius-rpc.com/?api-key={key}",
+  "geyser_enabled": false,
+  "commitment": "confirmed",
+  "max_clone_per_day": 50,
+  "circuit_breaker": {
+    "yellow_threshold_per_hour": 30,
+    "orange_threshold_per_hour": 40,
+    "red_on_unauthorized": true
+  }
+}

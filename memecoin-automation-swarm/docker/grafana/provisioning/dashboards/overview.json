@@ -1,0 +1,73 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Clone Deployments (24h)",
+      "type": "stat",
+      "datasource": { "type": "grafana-clickhouse-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT count() FROM clonet.clone_deployments WHERE deployed_at > now() - INTERVAL 24 HOUR"
+        }
+      ],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 30 }, { "color": "red", "value": 45 }] } } },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "title": "Tokens Classified (24h)",
+      "type": "stat",
+      "datasource": { "type": "grafana-clickhouse-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT count() FROM clonet.classifications WHERE classified_at > now() - INTERVAL 24 HOUR"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+    },
+    {
+      "title": "LLM Cost Today",
+      "type": "stat",
+      "datasource": { "type": "grafana-clickhouse-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT round(sum(cost_usd), 2) FROM clonet.llm_usage WHERE called_at > today()"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "red", "value": 9 }] } } },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 }
+    },
+    {
+      "title": "Classification Breakdown",
+      "type": "piechart",
+      "datasource": { "type": "grafana-clickhouse-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT classification, count() as count FROM clonet.classifications WHERE classified_at > now() - INTERVAL 24 HOUR GROUP BY classification"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 4 }
+    },
+    {
+      "title": "Deployment Rate (hourly)",
+      "type": "timeseries",
+      "datasource": { "type": "grafana-clickhouse-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT toStartOfHour(deployed_at) AS hour, chain, count() AS deployments FROM clonet.clone_deployments WHERE deployed_at > now() - INTERVAL 7 DAY GROUP BY hour, chain ORDER BY hour"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 4 }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["clonet"],
+  "templating": { "list": [] },
+  "time": { "from": "now-24h", "to": "now" },
+  "title": "Clone Detection Overview",
+  "uid": "clonet-overview"
+}

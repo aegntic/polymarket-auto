@@ -1,0 +1,23 @@
+{
+  "chain": "solana",
+  "network": "devnet",
+  "rpc_url_env": "HELIUS_API_KEY",
+  "rpc_url_template": "https://devnet.helius-rpc.com/?api-key={key}",
+  "geyser_enabled": false,
+  "ws_url": "wss://devnet.helius-rpc.com/?api-key={key}",
+  "commitment": "confirmed",
+  "max_clone_per_day": 50,
+  "circuit_breaker": {
+    "yellow_threshold_per_hour": 30,
+    "orange_threshold_per_hour": 40,
+    "red_on_unauthorized": true
+  },
+  "signals": {
+    "name_similarity_weight": 0.30,
+    "deployment_timing_weight": 0.20,
+    "metadata_pattern_weight": 0.15,
+    "holder_distribution_weight": 0.15,
+    "trading_velocity_weight": 0.10,
+    "oracle_confidence_weight": 0.10
+  }
+}
