@@ -34,3 +34,13 @@ Thumbs.db
 *.key
 *secret*
 credentials.json
+
+# Screenshots / temp
+*.png
+*.jpg
+*.jpeg
+.playwright-mcp/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
