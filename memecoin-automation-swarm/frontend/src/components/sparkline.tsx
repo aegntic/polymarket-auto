@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
-import { createPrng } from "@/lib/prng";
+
+function createPrng(seed: number) {
+  let s = seed | 0;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
 
 interface SparklineProps {
   data?: number[];
