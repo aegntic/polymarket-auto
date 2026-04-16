@@ -356,7 +356,7 @@ app.get("/modules", async (c) => {
     { id: "mint", name: "MINT", enabled: true, status: "running" },
     { id: "detect", name: "DETECT", enabled: true, status: "running" },
     { id: "risk", name: "RISK", enabled: true, status: "running" },
-    { id: "oracle", name: "ORACLE", enabled: false, status: "stopped" },
+    { id: "oracle", name: "ORACLE", enabled: true, status: "running" },
     { id: "txeng", name: "TXENG", enabled: true, status: "running" },
     { id: "chain", name: "CHAIN", enabled: true, status: "running" },
     { id: "viral", name: "VIRAL", enabled: false, status: "stopped" },
@@ -606,4 +606,4 @@ app.onError((err, c) => {
 // ---------------------------------------------------------------------------
 const port = parseInt(process.env.PORT || "8080", 10);
 console.log(`MAS API starting on port ${port}`);
-service serve({ fetch: app.fetch, port });
+serve({ fetch: app.fetch, port });
