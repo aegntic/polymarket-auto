@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf frontend/.git)",
+      "Bash(git rm:*)"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+/home/ae/.claude/skills/gstack/open-gstack-browser/SKILL.md
