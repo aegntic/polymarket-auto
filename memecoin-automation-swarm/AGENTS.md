@@ -1,81 +1,79 @@
-## LLM Model-Based Rate Limits
+# AGENTS.md: Memecoin Automation Swarm - Agent Directives
 
-Updated from arbitrary limits (40/hr, 200/day) to model-based limits:
+Welcome, Agent. This file outlines crucial rules, boundaries, and commands for operating within this repository. **Failure to adhere to these constraints is a critical error.**
 
-- maxPerHour: 200 (based on GPT-4o/Claude processing capacity)
-- maxPerDay: 1000 (daily processing capacity)
-- Budget remains $10/day
+## 1. Commands
 
-## Rate Limit Logic
+### Build, Lint, and Format
 
-Maintained green/orange/red levels based on percentage thresholds of model capacity:
+This project uses **Bun** for TypeScript and **Cargo** for Rust.
 
-- Green: ≤ 70% of capacity
-- Orange: 70-90% of capacity
-- Red: > 90% of capacity
+- **TypeScript:** `bun run build`
+- **TypeScript Types:** `bun run typecheck` (MUST PASS before completing any TS task)
+- **TypeScript Lint:** `bun run lint` (ESLint)
+- **TypeScript Format:** `bun run fmt`
+- **Rust Build:** `cargo build`
+- **Rust Lint:** `cargo clippy --all-targets --all-features`
+- **Rust Format:** `cargo fmt`
 
-## Auto Shutdown Removed
+### Testing
 
-Emergency shutdown triggered by profitability target has been removed. System now requires manual intervention when target is achieved.
+- **TypeScript (All):** `bun test`
+- **TypeScript (Single File):** `bun test <path/to/file.test.ts>`
+- **Rust (All):** `cargo test`
+- **Rust (Single Module/Function):** `cargo test <module_or_function_name>`
 
-## All Other Features Intact
+## 2. Code Style & Architecture Guidelines
 
-- Solana deployment with wallet integration
-- 3x profitability tracking
-- Agent-based monitoring (3 specialized agents)
-- Circuit breakers for service protection
-- Complete type safety
-- Budget remains $10/day
+### Language Boundary (CRITICAL)
 
-## Architecture Rules
-
-### Hot Path vs Control Plane Boundary
-
-The hot path (Rust) handles: signal detection, decision-making, transaction construction,
-bundle submission, economy settlement. TypeScript handles ONLY: monitoring, configuration,
-social media, data analysis, API integrations. **No TypeScript in the request path from
-signal detection to transaction submission.** The two layers communicate exclusively through
-Redis pub/sub channels.
+- **Rust (Hot Path):** ALL logic from signal detection to transaction submission MUST be in Rust. This includes signal detection, decision-making, transaction construction, bundle submission, and economy settlement.
+- **TypeScript (Control Plane):** Handles ONLY monitoring, configuration, social media (VIRAL), data analysis, and API integrations. **NEVER use TS in the hot path.**
 
 ### Module Communication
 
-Agents communicate through Redis channels: `recon:signals`, `mint:deployed`, `detect:classifications`,
-`detect:alerts`, `oracle:predictions`, `risk:alerts`, `risk:settlement`, `txeng:submitted`,
-`viral:posts`, `viral:narratives`.
-All events use a consistent JSON envelope: `{ timestamp, module, event_type, payload }`.
+Agents communicate _exclusively_ through Redis pub/sub channels:
 
-### VIRAL Module (Social Media Automation)
+- `recon:signals`, `mint:deployed`, `detect:classifications`, `detect:alerts`, `oracle:predictions`, `risk:alerts`, `risk:settlement`, `txeng:submitted`, `viral:posts`, `viral:narratives`.
+- **Envelope Format:** `{ timestamp, module, event_type, payload }`
 
-The VIRAL module automates social media posting, narrative seeding, and cross-platform promotion
-to validate that clone detection systems work against realistic social propagation patterns.
-Bait tokens on mainnet must appear identical to genuine clone tokens — no labeling, watermarks,
-or signals that would tip off detection systems.
+### Rust Guidelines
 
-Scope:
+- Use `anyhow` for application-level error handling.
+- Use `thiserror` for library error types.
+- Ensure exhaustive error handling; never silently swallow errors on the hot path.
+- Use `tracing` for instrumentation and logging.
 
-- Automated posting to X/Twitter, Telegram, Discord for bait clones
-- Narrative seeding and content generation via LLM templates
-- Cross-platform coordination (post scheduling, engagement tracking)
-- Every action logged with timestamps for post-campaign analysis
+### TypeScript Guidelines
 
-Constraints:
+- Use strict typing. `zod` is available for runtime validation.
+- Ensure files are ES Modules.
+- Use idiomatic TS naming: `camelCase` for variables/functions, `PascalCase` for classes/types.
 
-- Never targets or impersonates specific real projects or communities
-- No anti-detect browser infrastructure
-- Budget falls under the $10/day LLM API cap for content generation
+### VIRAL Module Constraints (Social Media)
 
-### Safety Constraints (RISK Module)
+- **Scope:** Automated posting to X/Telegram/Discord for bait clones, narrative seeding via LLMs, engagement tracking.
+- **Rules:** Never impersonate specific real projects or communities. No anti-detect browser infrastructure. All mainnet bait tokens must be indistinguishable from genuine clone tokens on-chain (provenance tags are internal only).
 
-These are hard-coded, non-negotiable limits:
+## 3. Rate Limits, Budget, and Safety constraints (RISK Module)
 
-- Max 50 clone deployments per day (across all networks)
-- Max $10/day LLM API budget
-- All clones tagged with research provenance metadata (internal DB only — never on-chain)
-- Circuit breakers: Yellow (>30/hr), Orange (>40/hr or >30% error), Red (unauthorized operation = full halt)
-- Mainnet bait tokens must be indistinguishable from real clone tokens in on-chain metadata
+### Financial and API Constraints
 
-### Internal Economy
+- **Max LLM Budget:** $10/day (hard cap). This includes VIRAL LLM generation.
+- **Max Deployments:** 50 clone deployments per day (across all networks).
+- **Internal Economy:** Settle inter-agent service payments atomically via Redis `MULTI/EXEC` in micro-USD.
 
-Redis-backed double-entry ledger. All inter-agent service payments settle atomically via
-MULTI/EXEC. Denominated in micro-USD. Each agent has its own account, P&L tracked in
-ClickHouse. Capital reallocation every 15 min based on rolling 6-hour RAROC.
+### Circuit Breakers (LLM processing & system limits)
+
+- **maxPerHour:** 200 / **maxPerDay:** 1000
+- **Green:** ≤ 70% capacity
+- **Orange:** 70-90% capacity (OR >40/hr OR >30% error rate)
+- **Red:** > 90% capacity (OR unauthorized operation = full halt)
+
+## 4. Agent Mechanical Overrides
+
+- **Dependency Discipline:** Use ONLY `bun` for TypeScript dependencies (`bun.lock` exists). Never use `npm` or `yarn`.
+- **Git Hygiene:** NEVER append `Co-Authored-By: Claude` to commit messages.
+- **Verification:** You MUST run `bun run typecheck` and `bun run lint` (or `cargo test`/`cargo clippy`) after making changes. Do not claim success if these fail.
+- **Dead Code:** Clean up unused imports, dead props, and debug logs (Step 0) before starting structural refactors.
+- **Context Management:** For files > 500 LOC, use offset/limit to read chunks.
