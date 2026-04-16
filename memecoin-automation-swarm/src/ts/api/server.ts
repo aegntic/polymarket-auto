@@ -28,10 +28,18 @@ import {
   getAssociatedTokenAddress,
   getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
+import {
+  startPipeline,
+  stopPipeline,
+  getPipelineStatus,
+} from "../pipeline/orchestrator";
 
 const app = new Hono();
 
 app.use("*", cors());
+
+// Start the orchestrator pipeline
+startPipeline();
 
 // ---------------------------------------------------------------------------
 // Solana wallet configuration
@@ -75,8 +83,29 @@ app.get("/health", async (c) => {
     status,
     redis: redisOk ? "connected" : "disconnected",
     clickhouse: chOk ? "connected" : "disconnected",
+    pipeline: getPipelineStatus(),
     timestamp: new Date().toISOString(),
   });
+});
+
+// ---------------------------------------------------------------------------
+// Pipeline status endpoints
+// ---------------------------------------------------------------------------
+app.get("/pipeline/status", (c) => {
+  return c.json({
+    success: true,
+    data: getPipelineStatus(),
+  });
+});
+
+app.post("/pipeline/start", (c) => {
+  startPipeline();
+  return c.json({ success: true, data: getPipelineStatus() });
+});
+
+app.post("/pipeline/stop", (c) => {
+  stopPipeline();
+  return c.json({ success: true, data: getPipelineStatus() });
 });
 
 // ---------------------------------------------------------------------------
