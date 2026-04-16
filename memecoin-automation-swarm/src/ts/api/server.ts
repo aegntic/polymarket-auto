@@ -5,16 +5,28 @@ import "dotenv/config";
 import * as redis from "../shared/redis";
 import * as ch from "../shared/clickhouse";
 import { MasError, ERROR_CODES } from "../shared/types";
-import type { Classification, ClassificationResult, TokenObservation } from "../shared/types";
+import type {
+  Classification,
+  ClassificationResult,
+  TokenObservation,
+} from "../shared/types";
 import { OracleClassifier } from "../oracle/classifier";
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  Transaction,
+  SystemProgram,
+  LAMPORTS_PER_SOL,
+  sendAndConfirmTransaction,
+} from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountInstruction,
-  createMint,
+  createInitializeMintInstruction,
+  createMintToInstruction,
   getAssociatedTokenAddress,
   getOrCreateAssociatedTokenAccount,
-  mintTo,
 } from "@solana/spl-token";
 
 const app = new Hono();
@@ -24,11 +36,26 @@ app.use("*", cors());
 // ---------------------------------------------------------------------------
 // Solana wallet configuration
 // ---------------------------------------------------------------------------
-const connection = new Connection(process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com", "confirmed");
+const HELIUS_KEY = process.env.HELIUS_API_KEY;
+const rpcUrl = HELIUS_KEY
+  ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`
+  : "https://api.mainnet-beta.solana.com";
+const connection = new Connection(rpcUrl, "confirmed");
 const DEPLOYER_WALLET_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 
 if (!DEPLOYER_WALLET_KEY) {
-  console.warn("WARNING: DEPLOYER_PRIVATE_KEY not set. Deploy endpoint will return simulation only.");
+  console.warn(
+    "WARNING: DEPLOYER_PRIVATE_KEY not set. Deploy endpoint will return simulation only.",
+  );
+} else {
+  try {
+    const kp = Keypair.fromSecretKey(
+      new Uint8Array(JSON.parse(DEPLOYER_WALLET_KEY)),
+    );
+    console.log(`Deployer wallet: ${kp.publicKey.toString()}`);
+  } catch {
+    console.error("ERROR: Failed to parse DEPLOYER_PRIVATE_KEY");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -36,7 +63,11 @@ if (!DEPLOYER_WALLET_KEY) {
 // ---------------------------------------------------------------------------
 app.get("/health", async (c) => {
   const [redisOk, chOk] = await Promise.all([
-    redis.getRedis().ping().then(() => true).catch(() => false),
+    redis
+      .getRedis()
+      .ping()
+      .then(() => true)
+      .catch(() => false),
     ch.ping(),
   ]);
   const status = redisOk && chOk ? "operational" : "degraded";
@@ -86,7 +117,9 @@ app.post("/deploy", async (c) => {
   }
 
   try {
-    const payer = Keypair.fromSecretKey(new Uint8Array(JSON.parse(DEPLOYER_WALLET_KEY)));
+    const payer = Keypair.fromSecretKey(
+      new Uint8Array(JSON.parse(DEPLOYER_WALLET_KEY)),
+    );
     const mintKeypair = Keypair.generate();
 
     // Create associated token account for payer
@@ -94,7 +127,7 @@ app.post("/deploy", async (c) => {
       connection,
       payer,
       mintKeypair.publicKey,
-      payer.publicKey
+      payer.publicKey,
     );
 
     const tx1 = new Transaction().add(
@@ -102,8 +135,8 @@ app.post("/deploy", async (c) => {
         payer.publicKey,
         payerTokenAccount.address,
         payer.publicKey,
-        mintKeypair.publicKey
-      )
+        mintKeypair.publicKey,
+      ),
     );
 
     // Fund the wallet if needed (optional - can be pre-funded)
@@ -112,32 +145,44 @@ app.post("/deploy", async (c) => {
 
     // Create the mint
     const createMintTx = new Transaction().add(
-      createMint(
-        connection,
-        payer,
+      SystemProgram.createAccount({
+        fromPubkey: payer.publicKey,
+        newAccountPubkey: mintKeypair.publicKey,
+        space: 82, // Mint account size
+        lamports: await connection.getMinimumBalanceForRentExemption(82),
+        programId: TOKEN_PROGRAM_ID,
+      }),
+      createInitializeMintInstruction(
         mintKeypair.publicKey,
-        payer.publicKey,
         decimals,
-        TOKEN_PROGRAM_ID
-      )
+        payer.publicKey,
+        payer.publicKey,
+        TOKEN_PROGRAM_ID,
+      ),
     );
 
     // Mint tokens to payer's associated token account
     const mintTx = new Transaction().add(
-      mintTo(
-        connection,
-        payer,
+      createMintToInstruction(
         mintKeypair.publicKey,
         payerTokenAccount.address,
-        payer,
+        payer.publicKey,
         supply * Math.pow(10, decimals),
-        []
-      )
+        [],
+        TOKEN_PROGRAM_ID,
+      ),
     );
 
+    // Mint tokens to payer's associated token account
     // Send transactions
-    const createSig = await sendAndConfirmTransaction(connection, createMintTx, [payer, mintKeypair]);
-    const mintSig = await sendAndConfirmTransaction(connection, mintTx, [payer, mintKeypair]);
+    const createSig = await sendAndConfirmTransaction(
+      connection,
+      createMintTx,
+      [payer, mintKeypair],
+    );
+    const mintSig = await sendAndConfirmTransaction(connection, mintTx, [
+      payer,
+    ]);
 
     return c.json({
       success: true,
@@ -158,8 +203,14 @@ app.post("/deploy", async (c) => {
   } catch (err) {
     console.error("Deployment error:", err);
     return c.json(
-      { error: { code: "MAS_E8002", message: "Deployment failed", fix: "Check wallet funding and RPC connectivity" } },
-      500
+      {
+        error: {
+          code: "MAS_E8002",
+          message: "Deployment failed",
+          fix: "Check wallet funding and RPC connectivity",
+        },
+      },
+      500,
     );
   }
 });
@@ -203,13 +254,16 @@ app.get("/signals", async (c) => {
 
     const now = Date.now();
     const signals = rows.map((r, i) => {
-      const createdAt = r.first_seen_at ? new Date(r.first_seen_at.replace(" ", "T")).getTime() : now;
+      const createdAt = r.first_seen_at
+        ? new Date(r.first_seen_at.replace(" ", "T")).getTime()
+        : now;
       const ageHours = Math.max(0, Math.floor((now - createdAt) / 3600000));
-      const score = r.confidence != null && r.classification === "clone"
-        ? Math.round(r.confidence * 100) / 100
-        : r.confidence != null
-          ? Math.round((1 - r.confidence) * 100) / 100
-          : 0;
+      const score =
+        r.confidence != null && r.classification === "clone"
+          ? Math.round(r.confidence * 100) / 100
+          : r.confidence != null
+            ? Math.round((1 - r.confidence) * 100) / 100
+            : 0;
 
       return {
         id: `sig-${i}`,
@@ -252,8 +306,10 @@ app.get("/circuit-breaker", async (c) => {
 
   let level = "green";
   if (hourly >= maxPerHour * 0.9 || daily >= maxPerDay * 0.9) level = "red";
-  else if (hourly >= maxPerHour * 0.7 || daily >= maxPerDay * 0.7) level = "orange";
-  else if (hourly >= maxPerHour * 0.4 || daily >= maxPerDay * 0.4) level = "yellow";
+  else if (hourly >= maxPerHour * 0.7 || daily >= maxPerDay * 0.7)
+    level = "orange";
+  else if (hourly >= maxPerHour * 0.4 || daily >= maxPerDay * 0.4)
+    level = "yellow";
 
   return c.json({
     success: true,
@@ -299,7 +355,12 @@ app.get("/classifications", async (c) => {
       similarityScore: r.confidence,
       reasoning: r.reasoning ? r.reasoning.split(",") : [],
       strategy: "unknown",
-      riskLevel: r.classification === "clone" ? "high" : r.classification === "original" ? "low" : "medium",
+      riskLevel:
+        r.classification === "clone"
+          ? "high"
+          : r.classification === "original"
+            ? "low"
+            : "medium",
     }));
 
     return c.json({ success: true, data });
@@ -385,10 +446,20 @@ app.get("/modules", async (c) => {
 const oracle = new OracleClassifier();
 
 app.post("/classify", async (c) => {
-  const body = await c.req.json<{ token_address: string; chain: string; name?: string; symbol?: string }>();
+  const body = await c.req.json<{
+    token_address: string;
+    chain: string;
+    name?: string;
+    symbol?: string;
+  }>();
   if (!body.token_address || !body.chain) {
     return c.json(
-      { error: { code: "MAS_E8001", message: "Missing required fields: token_address, chain" } },
+      {
+        error: {
+          code: "MAS_E8001",
+          message: "Missing required fields: token_address, chain",
+        },
+      },
       400,
     );
   }
@@ -397,7 +468,12 @@ app.post("/classify", async (c) => {
   const hourlyCount = await redis.getCounter(hourlyKey);
   if (hourlyCount >= 40) {
     return c.json(
-      { error: { code: ERROR_CODES.CB_ORANGE, message: "Circuit breaker: rate limit exceeded" } },
+      {
+        error: {
+          code: ERROR_CODES.CB_ORANGE,
+          message: "Circuit breaker: rate limit exceeded",
+        },
+      },
       429,
     );
   }
@@ -423,14 +499,16 @@ app.post("/classify", async (c) => {
   const result = await oracle.classify(observation);
 
   try {
-    await ch.insertClassifications([{
-      token_address: result.token_address,
-      chain: result.chain,
-      classification: result.classification,
-      confidence: result.confidence,
-      reasoning: result.reasoning,
-      classified_at: result.classified_at,
-    }]);
+    await ch.insertClassifications([
+      {
+        token_address: result.token_address,
+        chain: result.chain,
+        classification: result.classification,
+        confidence: result.confidence,
+        reasoning: result.reasoning,
+        classified_at: result.classified_at,
+      },
+    ]);
   } catch {
     // Insert failed, still return result
   }
@@ -444,17 +522,34 @@ app.post("/classify", async (c) => {
 app.get("/analysis/metrics", async (c) => {
   try {
     const [sigCount, depCount, classCount] = await Promise.all([
-      ch.query<{ count: string }>("SELECT count() as count FROM clonet.token_observations")
-        .then((r) => parseInt(r[0]?.count || "0", 10)).catch(() => 0),
-      ch.query<{ count: string }>("SELECT count() as count FROM clonet.clone_deployments")
-        .then((r) => parseInt(r[0]?.count || "0", 10)).catch(() => 0),
-      ch.query<{ count: string }>("SELECT count() as count FROM clonet.classifications")
-        .then((r) => parseInt(r[0]?.count || "0", 10)).catch(() => 0),
+      ch
+        .query<{ count: string }>(
+          "SELECT count() as count FROM clonet.token_observations",
+        )
+        .then((r) => parseInt(r[0]?.count || "0", 10))
+        .catch(() => 0),
+      ch
+        .query<{ count: string }>(
+          "SELECT count() as count FROM clonet.clone_deployments",
+        )
+        .then((r) => parseInt(r[0]?.count || "0", 10))
+        .catch(() => 0),
+      ch
+        .query<{ count: string }>(
+          "SELECT count() as count FROM clonet.classifications",
+        )
+        .then((r) => parseInt(r[0]?.count || "0", 10))
+        .catch(() => 0),
     ]);
 
     return c.json({
       success: true,
-      data: { signals: sigCount, deployments: depCount, classifications: classCount, profitLoss: 0 },
+      data: {
+        signals: sigCount,
+        deployments: depCount,
+        classifications: classCount,
+        profitLoss: 0,
+      },
     });
   } catch {
     return c.json({
@@ -501,102 +596,14 @@ app.get("/analysis/hourly", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Deploy endpoint (with actual Solana deployment)
-// ---------------------------------------------------------------------------
-app.post("/deploy", async (c) => {
-  const body = await c.req.json<{
-    name?: string;
-    symbol?: string;
-    supply?: number;
-    decimals?: number;
-  }>();
-
-  const name = body.name || "BaitToken";
-  const symbol = body.symbol || "BAIT";
-  const supply = body.supply || 1_000_000_000;
-  const decimals = body.decimals || 9;
-
-  if (!DEPLOYER_WALLET_KEY) {
-    return c.json({
-      success: true,
-      simulation: true,
-      message: "No deployer wallet configured. Returning simulation data.",
-      data: {
-        id: `sim-${Date.now()}`,
-        tokenName: `${symbol}-${Date.now().toString(36).slice(-6)}`,
-        mintAddress: `Sim11111111111111111111111111111111${Date.now().toString(36).slice(-8)}`,
-        chain: "solana",
-        strategy: "substitution",
-        status: "pending",
-        deployedAt: new Date().toISOString(),
-        txHash: "SimTx" + Date.now().toString(36),
-        pnl: 0,
-        costUSD: 0.0005,
-      },
-    });
-  }
-
-  try {
-    const payer = Keypair.fromSecretKey(new Uint8Array(JSON.parse(DEPLOYER_WALLET_KEY)));
-    const mintKeypair = Keypair.generate();
-
-    const payerTokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      payer,
-      mintKeypair.publicKey,
-      payer.publicKey,
-    );
-
-    const createMintTx = new Transaction().add(
-      createMint(connection, payer, mintKeypair.publicKey, payer.publicKey, decimals, TOKEN_PROGRAM_ID),
-    );
-
-    const mintTx = new Transaction().add(
-      mintTo(
-        connection,
-        payer,
-        mintKeypair.publicKey,
-        payerTokenAccount.address,
-        payer,
-        supply * Math.pow(10, decimals),
-        [],
-      ),
-    );
-
-    const createSig = await sendAndConfirmTransaction(connection, createMintTx, [payer, mintKeypair]);
-    const mintSig = await sendAndConfirmTransaction(connection, mintTx, [payer, mintKeypair]);
-
-    return c.json({
-      success: true,
-      simulation: false,
-      data: {
-        id: `deploy-${Date.now()}`,
-        tokenName: `${symbol}-${Date.now().toString(36).slice(-6)}`,
-        mintAddress: mintKeypair.publicKey.toString(),
-        chain: "solana",
-        strategy: "substitution",
-        status: "deployed",
-        deployedAt: new Date().toISOString(),
-        txHash: mintSig,
-        pnl: 0,
-        costUSD: 0.0005,
-      },
-    });
-  } catch (err) {
-    console.error("Deployment error:", err);
-    return c.json(
-      { error: { code: "MAS_E8002", message: "Deployment failed", fix: "Check wallet funding and RPC connectivity" } },
-      500,
-    );
-  }
-});
-
-// ---------------------------------------------------------------------------
 // Error handler
 // ---------------------------------------------------------------------------
 app.onError((err, c) => {
   if (err instanceof MasError) {
-    return c.json({ error: { code: err.code, message: err.message, fix: err.fix } }, 500);
+    return c.json(
+      { error: { code: err.code, message: err.message, fix: err.fix } },
+      500,
+    );
   }
   return c.json({ error: { code: "MAS_E9999", message: err.message } }, 500);
 });
