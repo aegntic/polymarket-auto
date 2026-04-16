@@ -1,0 +1,1 @@
+/home/ae/.claude/skills/gstack/pair-agent/SKILL.md
