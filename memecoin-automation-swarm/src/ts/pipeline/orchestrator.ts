@@ -19,9 +19,8 @@ export async function runReconLoop() {
   console.log("[Pipeline] Running RECON cycle...");
   try {
     const pairs = await fetchLatestTokens();
-    const observations = pairs
-      .map(pairToObservation)
-      .filter((o): o is TokenObservation => Boolean(o));
+    const rawObs = await Promise.all(pairs.map(pairToObservation));
+    const observations = rawObs.filter((o): o is TokenObservation => o !== null);
 
     if (observations.length > 0) {
       const screened = observations.map((obs) => ({
@@ -35,6 +34,8 @@ export async function runReconLoop() {
         chain: obs.chain,
         name: obs.name,
         symbol: obs.symbol,
+        decimals: obs.decimals,
+        supply: obs.supply || "",
         creator_address: obs.creator_address || "",
         deploy_tx: "",
         first_seen_at: obs.created_at || now,

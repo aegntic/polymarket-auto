@@ -1,3 +1,5 @@
+
+import { fetchSolanaTokenInfo, fetchEvmTokenInfo } from "./rpc";
 import { Chain, TokenObservation } from "../shared/types";
 import { nameSimilarity } from "../detect/classifier";
 
@@ -83,19 +85,38 @@ export async function fetchTokenProfiles(chain: string): Promise<DexTokenProfile
   }
 }
 
-export function pairToObservation(pair: DexPair): TokenObservation | null {
+export async function pairToObservation(pair: DexPair): Promise<TokenObservation | null> {
   const chain = mapChain(pair.chainId);
   if (!chain) return null;
   const vol = pair.volume || { h24: 0, h6: 0, h1: 0, m5: 0 };
   const txns = pair.txns?.h24 || { buys: 0, sells: 0 };
+
+
+  let decimals = chain === "solana" ? 9 : 18;
+  let creator_address = "";
+  let supply = "";
+
+  if (chain === "solana") {
+     const info = await fetchSolanaTokenInfo(pair.baseToken.address, process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com");
+     decimals = info.decimals;
+     creator_address = info.creator_address;
+     supply = info.supply;
+  } else if (chain === "base") {
+     const info = await fetchEvmTokenInfo(pair.baseToken.address, process.env.BASE_RPC_URL || "https://mainnet.base.org");
+     decimals = info.decimals;
+     creator_address = info.creator_address;
+     supply = info.supply;
+  }
 
   return {
     token_address: pair.baseToken.address,
     chain,
     name: pair.baseToken.name,
     symbol: pair.baseToken.symbol,
-    decimals: chain === "solana" ? 9 : 18,
-    creator_address: "",
+    decimals,
+    supply,
+    creator_address,
+
     creation_tx: "",
     created_at: pair.pairCreatedAt
       ? new Date(pair.pairCreatedAt).toISOString().replace("T", " ").slice(0, 19)

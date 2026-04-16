@@ -32,9 +32,8 @@ async function main() {
   }
 
   // 2. Convert to observations and quick-screen for clones
-  const observations = pairs
-    .map(pairToObservation)
-    .filter(Boolean) as TokenObservation[];
+  const rawObs = await Promise.all(pairs.map(pairToObservation));
+  const observations = rawObs.filter((o): o is TokenObservation => o !== null);
   const screened = observations.map((obs) => ({
     obs,
     screen: quickScreen(obs),
@@ -53,6 +52,8 @@ async function main() {
     chain: obs.chain,
     name: obs.name,
     symbol: obs.symbol,
+    decimals: obs.decimals,
+    supply: obs.supply || "",
     creator_address: obs.creator_address || "",
     deploy_tx: "",
     first_seen_at: obs.created_at || now,
