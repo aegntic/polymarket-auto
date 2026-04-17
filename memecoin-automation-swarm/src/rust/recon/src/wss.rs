@@ -1,6 +1,7 @@
 use futures_util::stream::StreamExt;
 use redis::AsyncCommands;
-use serde_json::json;
+use reqwest;
+use serde_json::{json, Value};
 use shared::{Chain, TokenObservation};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
@@ -11,7 +12,11 @@ const PUMP_FUN_PROGRAM: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfX9PNnN62P5V3z5"; // P
 
 /// Establishes a WebSocket connection to a Solana RPC and subscribes to logs for the Pump.fun program.
 /// This runs at the absolute bare metal T+0ms.
-pub async fn start_sniper_listener(rpc_ws_url: &str, redis_url: &str) -> anyhow::Result<()> {
+pub async fn start_sniper_listener(
+    rpc_ws_url: &str,
+    redis_url: &str,
+    rpc_http_url: &str,
+) -> anyhow::Result<()> {
     let url = Url::parse(rpc_ws_url)?;
 
     info!("Connecting to WSS: {}", rpc_ws_url);
@@ -67,6 +72,57 @@ pub async fn start_sniper_listener(rpc_ws_url: &str, redis_url: &str) -> anyhow:
                                             sig
                                         );
 
+                                        // Try to decode transaction via RPC to get actual mint
+                                        let mut actual_mint = format!("mint_{}", &sig[0..8]);
+                                        let mut actual_creator = "unknown_creator_wss".to_string();
+
+                                        let client = reqwest::Client::new();
+                                        let req_body = json!({
+                                            "jsonrpc": "2.0",
+                                            "id": 1,
+                                            "method": "getTransaction",
+                                            "params": [
+                                                sig,
+                                                {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}
+                                            ]
+                                        });
+
+                                        match client.post(rpc_http_url).json(&req_body).send().await
+                                        {
+                                            Ok(resp) => {
+                                                if let Ok(tx_json) = resp.json::<Value>().await {
+                                                    if let Some(meta) = tx_json
+                                                        .get("result")
+                                                        .and_then(|r| r.get("meta"))
+                                                    {
+                                                        if let Some(post_tokens) = meta
+                                                            .get("postTokenBalances")
+                                                            .and_then(|pt| pt.as_array())
+                                                        {
+                                                            if !post_tokens.is_empty() {
+                                                                if let Some(mint) = post_tokens[0]
+                                                                    .get("mint")
+                                                                    .and_then(|m| m.as_str())
+                                                                {
+                                                                    actual_mint = mint.to_string();
+                                                                }
+                                                                if let Some(owner) = post_tokens[0]
+                                                                    .get("owner")
+                                                                    .and_then(|o| o.as_str())
+                                                                {
+                                                                    actual_creator =
+                                                                        owner.to_string();
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to fetch tx from RPC: {}", e);
+                                            }
+                                        }
+
                                         let now = SystemTime::now()
                                             .duration_since(UNIX_EPOCH)
                                             .unwrap()
@@ -75,15 +131,13 @@ pub async fn start_sniper_listener(rpc_ws_url: &str, redis_url: &str) -> anyhow:
 
                                         let now_dt = chrono::Utc::now();
                                         let obs = TokenObservation {
-                                            token_address: format!("mint_{}", &sig[0..8]), // placeholder until RPC decode
+                                            token_address: actual_mint,
                                             chain: Chain::Solana,
                                             name: "Unknown_WSS".to_string(),
                                             symbol: "UNK".to_string(),
                                             decimals: 6,
                                             supply: Some("1000000000".to_string()),
-                                            creator_address: Some(
-                                                "unknown_creator_wss".to_string(),
-                                            ),
+                                            creator_address: Some(actual_creator),
                                             creation_tx: Some(sig.to_string()),
                                             created_at: now_dt,
                                             metadata_uri: Some("".to_string()),
