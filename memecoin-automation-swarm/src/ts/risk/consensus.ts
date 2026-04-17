@@ -57,13 +57,13 @@ export class ConsensusGateway {
   private validators: AuthenticityValidator[];
   private threshold: number;
 
-  constructor(threshold = 4) {
+  constructor(threshold?: number) {
     this.validators = [
       new BudgetValidator(),
       new SecurityValidator(),
       new StrategyValidator(),
     ];
-    this.threshold = threshold;
+    this.threshold = threshold ?? this.validators.length;
   }
 
   async requestApproval(proposal: SpendProposal): Promise<boolean> {
