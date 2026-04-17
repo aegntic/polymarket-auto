@@ -16,6 +16,56 @@ let timeoutId: NodeJS.Timeout | null | number = null;
 let alphaCronId: NodeJS.Timeout | null | number = null;
 let classificationsInProgress = 0;
 
+export async function triggerAutoDeploy(
+  obs: TokenObservation,
+): Promise<string | null> {
+  try {
+    const response = await fetch("http://localhost:3000/deploy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: obs.name,
+        symbol: obs.symbol,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(
+        `[Pipeline] Auto-deploy failed with status: ${response.status}`,
+      );
+      return null;
+    }
+
+    const data = await response.json();
+    return data.mintAddress;
+  } catch (err) {
+    console.error("[Pipeline] Auto-deploy error:", err);
+    return null;
+  }
+}
+
+export async function triggerViralSwarm(
+  obs: TokenObservation,
+  cloneMintAddress: string,
+) {
+  try {
+    // Import ViralSwarm dynamically or use an existing import if available
+    const { ViralSwarm } = await import("../viral/swarm").catch(() => {
+      console.error("[Pipeline] viral/swarm module not found.");
+      return { ViralSwarm: null };
+    });
+
+    if (!ViralSwarm) return;
+
+    const swarm = new ViralSwarm();
+    await swarm.triggerSwarm(obs, cloneMintAddress);
+  } catch (err) {
+    console.error("[Pipeline] Viral swarm error:", err);
+  }
+}
+
 export async function runAlphaDiscoveryLoop() {
   if (!isRunning) return;
   const alphaEngine = new AlphaDiscoveryEngine();
@@ -132,6 +182,16 @@ export async function startClassifierSubscriber() {
         // From Rust
         obs = envelope.payload as TokenObservation;
         console.log(`[Pipeline] HOT PATH SIGNAL received for ${obs.symbol}`);
+
+        if ((envelope.payload as any).signal_score === 99) {
+          console.log(
+            `[Pipeline] VAMPIRE SHADOW INTERCEPT TRIGGERED FOR ${obs.symbol}! Executing auto-deploy...`,
+          );
+          const cloneMintAddress = await triggerAutoDeploy(obs);
+          if (cloneMintAddress) {
+            await triggerViralSwarm(obs, cloneMintAddress);
+          }
+        }
       } else {
         // From TS
         const payload = envelope.payload as any;

@@ -7,7 +7,9 @@ export const CloneNetRecordSchema = z.object({
   symbol: z.string(),
   classification: z.enum(["clone", "original", "unknown"]),
   confidence: z.number().min(0).max(1),
-  clone_strategy: z.enum(["substitution", "homophone", "suffix", "unicode", "other"]).optional(),
+  clone_strategy: z
+    .enum(["substitution", "homophone", "suffix", "unicode", "other"])
+    .optional(),
   original_token: z.string().optional(),
   reasoning: z.string(),
   model_used: z.string().optional(),
@@ -31,7 +33,9 @@ export function toCSV(records: CloneNetRecord[]): string {
   const headers = Object.keys(records[0]).join(",");
   const rows = records.map((r) =>
     Object.values(r)
-      .map((v) => (typeof v === "string" ? `"${v.replace(/"/g, '""')}"` : String(v ?? "")))
+      .map((v) =>
+        typeof v === "string" ? `"${v.replace(/"/g, '""')}"` : String(v ?? ""),
+      )
       .join(","),
   );
   return [headers, ...rows].join("\n");

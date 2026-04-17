@@ -1,5 +1,9 @@
 import OpenAI from "openai";
-import type { TokenObservation, ClassificationResult, Classification } from "../shared/types";
+import type {
+  TokenObservation,
+  ClassificationResult,
+  Classification,
+} from "../shared/types";
 import { getRedis, incrFloat, getCounter } from "../shared/redis";
 
 const NIM_BASE_URL = "https://integrate.api.nvidia.com/v1";
@@ -91,7 +95,10 @@ export class OracleClassifier {
     return this.ruleBasedFallback(token);
   }
 
-  private async callNIM(model: string, data: string): Promise<LLMClassification> {
+  private async callNIM(
+    model: string,
+    data: string,
+  ): Promise<LLMClassification> {
     const resp = await this.client.chat.completions.create({
       model,
       messages: [

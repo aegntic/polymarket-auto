@@ -1,5 +1,10 @@
 import { describe, test, expect } from "bun:test";
-import { levenshtein, nameSimilarity, ruleBasedClassify, ensembleClassify } from "../detect/classifier";
+import {
+  levenshtein,
+  nameSimilarity,
+  ruleBasedClassify,
+  ensembleClassify,
+} from "../detect/classifier";
 import type { TokenObservation } from "../shared/types";
 
 describe("levenshtein", () => {
@@ -48,19 +53,18 @@ describe("ruleBasedClassify", () => {
   };
 
   test("classifies clone when name matches known token", () => {
-    const result = ruleBasedClassify(
-      { ...baseToken, name: "dogecoin" },
-      ["dogecoin"],
-    );
+    const result = ruleBasedClassify({ ...baseToken, name: "dogecoin" }, [
+      "dogecoin",
+    ]);
     expect(result.classification).toBe("clone");
     expect(result.confidence).toBeGreaterThan(0.8);
   });
 
   test("classifies original when no match", () => {
-    const result = ruleBasedClassify(
-      { ...baseToken, name: "xyzunique123" },
-      ["dogecoin", "shiba"],
-    );
+    const result = ruleBasedClassify({ ...baseToken, name: "xyzunique123" }, [
+      "dogecoin",
+      "shiba",
+    ]);
     expect(result.classification).toBe("original");
   });
 });

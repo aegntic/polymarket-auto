@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
 import "dotenv/config";
+import * as fs from "fs";
+import * as path from "path";
 import * as redis from "../shared/redis";
 import * as ch from "../shared/clickhouse";
 import { MasError, ERROR_CODES } from "../shared/types";
@@ -33,10 +35,14 @@ import {
   stopPipeline,
   getPipelineStatus,
 } from "../pipeline/orchestrator";
+import { ConsensusGateway, type SpendProposal } from "../risk/consensus";
 
 const app = new Hono();
 
 app.use("*", cors());
+
+// Instantiate global ConsensusGateway
+const gateway = new ConsensusGateway();
 
 // Start the orchestrator pipeline
 startPipeline();
@@ -49,20 +55,51 @@ const rpcUrl = HELIUS_KEY
   ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`
   : "https://api.mainnet-beta.solana.com";
 const connection = new Connection(rpcUrl, "confirmed");
-const DEPLOYER_WALLET_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 
-if (!DEPLOYER_WALLET_KEY) {
-  console.warn(
-    "WARNING: DEPLOYER_PRIVATE_KEY not set. Deploy endpoint will return simulation only.",
-  );
-} else {
+let deployerKeypair: Keypair | null = null;
+const WALLET_FILE = path.join(process.cwd(), ".deployer_wallet.json");
+
+if (process.env.DEPLOYER_PRIVATE_KEY) {
   try {
-    const kp = Keypair.fromSecretKey(
-      new Uint8Array(JSON.parse(DEPLOYER_WALLET_KEY)),
+    deployerKeypair = Keypair.fromSecretKey(
+      new Uint8Array(JSON.parse(process.env.DEPLOYER_PRIVATE_KEY)),
     );
-    console.log(`Deployer wallet: ${kp.publicKey.toString()}`);
-  } catch {
-    console.error("ERROR: Failed to parse DEPLOYER_PRIVATE_KEY");
+    console.log(
+      `Deployer wallet loaded from env: ${deployerKeypair.publicKey.toString()}`,
+    );
+  } catch (err) {
+    console.error("ERROR: Failed to parse DEPLOYER_PRIVATE_KEY from env", err);
+  }
+} else if (fs.existsSync(WALLET_FILE)) {
+  try {
+    const data = fs.readFileSync(WALLET_FILE, "utf-8");
+    deployerKeypair = Keypair.fromSecretKey(new Uint8Array(JSON.parse(data)));
+    console.log(
+      `Deployer wallet loaded from file: ${deployerKeypair.publicKey.toString()}`,
+    );
+  } catch (err) {
+    console.error(`ERROR: Failed to parse wallet file ${WALLET_FILE}`, err);
+  }
+}
+
+if (!deployerKeypair) {
+  console.warn("WARNING: No deployer wallet found. Creating a new one...");
+  deployerKeypair = Keypair.generate();
+
+  const secretKeyArray = Array.from(deployerKeypair.secretKey);
+  try {
+    fs.writeFileSync(WALLET_FILE, JSON.stringify(secretKeyArray));
+    console.log(`\n======================================================`);
+    console.log(
+      `🎉 NEW WALLET CREATED: ${deployerKeypair.publicKey.toString()}`,
+    );
+    console.log(`💾 Saved to: ${WALLET_FILE}`);
+    console.log(
+      `🚨 IMPORTANT: You must fund this wallet with SOL before deploying!`,
+    );
+    console.log(`======================================================\n`);
+  } catch (err) {
+    console.error(`ERROR: Failed to write new wallet to ${WALLET_FILE}`, err);
   }
 }
 
@@ -125,30 +162,43 @@ app.post("/deploy", async (c) => {
   const decimals = body.decimals || 9;
 
   // Return simulation if no wallet configured
-  if (!DEPLOYER_WALLET_KEY) {
-    return c.json({
-      success: true,
-      simulation: true,
-      message: "No deployer wallet configured. Returning simulation data.",
-      data: {
-        id: `sim-${Date.now()}`,
-        tokenName: `${symbol}-${Date.now().toString(36).slice(-6)}`,
-        mintAddress: `Sim11111111111111111111111111111111${Date.now().toString(36).slice(-8)}`,
-        chain: "solana",
-        strategy: "substitution",
-        status: "pending",
-        deployedAt: new Date().toISOString(),
-        txHash: "SimTx" + Date.now().toString(36),
-        pnl: 0,
-        costUSD: 0.0005,
+  if (!deployerKeypair) {
+    return c.json(
+      {
+        success: false,
+        simulation: true,
+        message:
+          "No deployer wallet configured. Cannot proceed with deployment.",
       },
-    });
+      400,
+    );
+  }
+
+  // Consensus Check
+  const proposal: SpendProposal = {
+    id: `prop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    proposer: "mint-module",
+    amount_sol: 0.02, // Estimate for minting/deployment
+    reason: `Vampire intercept clone of ${symbol}`,
+    timestamp: Date.now(),
+  };
+
+  const isApproved = await gateway.requestApproval(proposal);
+  if (!isApproved) {
+    return c.json(
+      {
+        error: {
+          code: "MAS_E8003",
+          message:
+            "Consensus rejected: Authenticity gateway agents denied the spend.",
+        },
+      },
+      403,
+    );
   }
 
   try {
-    const payer = Keypair.fromSecretKey(
-      new Uint8Array(JSON.parse(DEPLOYER_WALLET_KEY)),
-    );
+    const payer = deployerKeypair;
     const mintKeypair = Keypair.generate();
 
     // Create associated token account for payer
@@ -229,14 +279,22 @@ app.post("/deploy", async (c) => {
         costUSD: 0.0005,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Deployment error:", err);
+    let message = "Deployment failed";
+    let fix = "Check wallet funding and RPC connectivity";
+
+    if (err.message && err.message.includes("insufficient funds")) {
+      message = `Insufficient funds in deployer wallet (${deployerKeypair?.publicKey.toString()})`;
+      fix = "Please fund the deployer wallet with SOL";
+    }
+
     return c.json(
       {
         error: {
           code: "MAS_E8002",
-          message: "Deployment failed",
-          fix: "Check wallet funding and RPC connectivity",
+          message,
+          fix,
         },
       },
       500,

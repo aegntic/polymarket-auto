@@ -22,14 +22,19 @@ export class NarrativeEngine {
    * Ingests a raw social post, extracts keywords using simple NLP/Regex,
    * and stores it in the active narrative sliding window.
    */
-  async ingestSocialPost(source: string, author: string, content: string, engagement: number) {
+  async ingestSocialPost(
+    source: string,
+    author: string,
+    content: string,
+    engagement: number,
+  ) {
     const keywords = this.extractKeywords(content);
-    
+
     // Only care if it contains trackable memecoin keywords
     if (keywords.length === 0) return;
 
     const event: NarrativeEvent = {
-      id: `${source}-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+      id: `${source}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       source,
       author,
       content,
@@ -39,13 +44,19 @@ export class NarrativeEngine {
     };
 
     // Store in Redis Sorted Set by timestamp to maintain the sliding window
-    await this.redis.zadd(this.WINDOW_KEY, event.timestamp, JSON.stringify(event));
-    
+    await this.redis.zadd(
+      this.WINDOW_KEY,
+      event.timestamp,
+      JSON.stringify(event),
+    );
+
     // Clean up old narratives outside the 1-hour window
-    const oneHourAgo = Date.now() - (this.TTL_SECONDS * 1000);
+    const oneHourAgo = Date.now() - this.TTL_SECONDS * 1000;
     await this.redis.zremrangebyscore(this.WINDOW_KEY, 0, oneHourAgo);
-    
-    console.log(`[VIRAL] Ingested narrative from ${author}: [${keywords.join(", ")}]`);
+
+    console.log(
+      `[VIRAL] Ingested narrative from ${author}: [${keywords.join(", ")}]`,
+    );
   }
 
   /**
@@ -61,7 +72,10 @@ export class NarrativeEngine {
    * Distance of 0 = Perfect Match (e.g. Elon just tweeted the exact ticker).
    * Distance of 100 = No relation to anything happening right now.
    */
-  async calculateNarrativeDistance(tokenName: string, tokenSymbol: string): Promise<{ distance: number; match: NarrativeEvent | null }> {
+  async calculateNarrativeDistance(
+    tokenName: string,
+    tokenSymbol: string,
+  ): Promise<{ distance: number; match: NarrativeEvent | null }> {
     const narratives = await this.getActiveNarratives();
     const tokenKeywords = this.extractKeywords(`${tokenName} ${tokenSymbol}`);
 
@@ -74,21 +88,25 @@ export class NarrativeEngine {
 
     for (const n of narratives) {
       // Find intersection of keywords
-      const intersection = n.keywords.filter(k => tokenKeywords.includes(k));
-      
+      const intersection = n.keywords.filter((k) => tokenKeywords.includes(k));
+
       if (intersection.length > 0) {
         // Base distance is 50 if there's a match.
         let distance = 50;
-        
+
         // Decrease distance (better match) if it's highly engaged
         if (n.velocity > 1000) distance -= 20;
-        
+
         // Decrease distance if the author is a God-Tier KOL (e.g., Elon)
-        if (n.author.toLowerCase() === "elonmusk" || n.author.toLowerCase() === "vitalikbuterin") distance -= 25;
-        
+        if (
+          n.author.toLowerCase() === "elonmusk" ||
+          n.author.toLowerCase() === "vitalikbuterin"
+        )
+          distance -= 25;
+
         // Increase distance if the narrative is getting old (decay over the hour)
         const ageMinutes = (Date.now() - n.timestamp) / 60000;
-        distance += (ageMinutes * 0.5); // Adds 0.5 distance per minute of age
+        distance += ageMinutes * 0.5; // Adds 0.5 distance per minute of age
 
         distance = Math.max(0, Math.min(100, distance)); // Clamp 0-100
 
@@ -104,8 +122,25 @@ export class NarrativeEngine {
 
   private extractKeywords(text: string): string[] {
     // Very basic extraction: remove punctuation, lowercase, split by space, remove common stop words.
-    const stopWords = new Set(["the", "is", "at", "which", "on", "and", "a", "an", "of", "in", "to", "for", "with"]);
-    const words = text.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/);
-    return words.filter(w => w.length > 2 && !stopWords.has(w));
+    const stopWords = new Set([
+      "the",
+      "is",
+      "at",
+      "which",
+      "on",
+      "and",
+      "a",
+      "an",
+      "of",
+      "in",
+      "to",
+      "for",
+      "with",
+    ]);
+    const words = text
+      .toLowerCase()
+      .replace(/[^\w\s]/g, "")
+      .split(/\s+/);
+    return words.filter((w) => w.length > 2 && !stopWords.has(w));
   }
 }

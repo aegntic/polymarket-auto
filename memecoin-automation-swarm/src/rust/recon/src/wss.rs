@@ -99,6 +99,8 @@ pub async fn start_sniper_listener(
                                         // Try to decode transaction via RPC to get actual mint and creator
                                         let mut actual_mint = format!("mint_{}", &sig[0..8]);
                                         let mut actual_creator = "unknown_creator_wss".to_string();
+                                        let mut token_name = "Unknown_WSS".to_string();
+                                        let mut token_symbol = "UNK".to_string();
 
                                         let req_client = reqwest::Client::new();
                                         let req_body = json!({
@@ -141,6 +143,31 @@ pub async fn start_sniper_listener(
                                                                     actual_creator =
                                                                         owner.to_string();
                                                                 }
+                                                                if let Some(ui_token_amount) =
+                                                                    post_tokens[0]
+                                                                        .get("uiTokenAmount")
+                                                                {
+                                                                    if let Some(name) =
+                                                                        ui_token_amount
+                                                                            .get("name")
+                                                                            .and_then(|n| {
+                                                                                n.as_str()
+                                                                            })
+                                                                    {
+                                                                        token_name =
+                                                                            name.to_string();
+                                                                    }
+                                                                    if let Some(symbol) =
+                                                                        ui_token_amount
+                                                                            .get("symbol")
+                                                                            .and_then(|s| {
+                                                                                s.as_str()
+                                                                            })
+                                                                    {
+                                                                        token_symbol =
+                                                                            symbol.to_string();
+                                                                    }
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -174,10 +201,10 @@ pub async fn start_sniper_listener(
                                         let obs = TokenObservation {
                                             token_address: actual_mint,
                                             chain: Chain::Solana,
-                                            name: "Unknown_WSS".to_string(),
-                                            symbol: "UNK".to_string(),
+                                            name: token_name,
+                                            symbol: token_symbol,
                                             decimals: 6,
-                                            supply: Some("1000000000".to_string()),
+                                            supply: Some("1000000000".to_string()), // standard pumpfun initial supply
                                             creator_address: Some(actual_creator),
                                             creation_tx: Some(sig.to_string()),
                                             created_at: now_dt,

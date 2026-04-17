@@ -54,8 +54,30 @@ describe("validateRecord", () => {
 describe("toJSONL", () => {
   test("serializes records to newline-delimited JSON", () => {
     const records = [
-      { token_address: "a", chain: "solana" as const, name: "A", symbol: "A", classification: "clone" as const, confidence: 0.9, reasoning: "test", created_at: "2026-01-01", classified_at: "2026-01-01", cost_usd: 0 },
-      { token_address: "b", chain: "solana" as const, name: "B", symbol: "B", classification: "original" as const, confidence: 0.8, reasoning: "test", created_at: "2026-01-01", classified_at: "2026-01-01", cost_usd: 0 },
+      {
+        token_address: "a",
+        chain: "solana" as const,
+        name: "A",
+        symbol: "A",
+        classification: "clone" as const,
+        confidence: 0.9,
+        reasoning: "test",
+        created_at: "2026-01-01",
+        classified_at: "2026-01-01",
+        cost_usd: 0,
+      },
+      {
+        token_address: "b",
+        chain: "solana" as const,
+        name: "B",
+        symbol: "B",
+        classification: "original" as const,
+        confidence: 0.8,
+        reasoning: "test",
+        created_at: "2026-01-01",
+        classified_at: "2026-01-01",
+        cost_usd: 0,
+      },
     ];
     const jsonl = toJSONL(records);
     expect(jsonl).toContain("\n");
@@ -66,7 +88,18 @@ describe("toJSONL", () => {
 describe("toCSV", () => {
   test("serializes records to CSV", () => {
     const records = [
-      { token_address: "a", chain: "solana" as const, name: "A", symbol: "A", classification: "clone" as const, confidence: 0.9, reasoning: "test", created_at: "2026-01-01", classified_at: "2026-01-01", cost_usd: 0 },
+      {
+        token_address: "a",
+        chain: "solana" as const,
+        name: "A",
+        symbol: "A",
+        classification: "clone" as const,
+        confidence: 0.9,
+        reasoning: "test",
+        created_at: "2026-01-01",
+        classified_at: "2026-01-01",
+        cost_usd: 0,
+      },
     ];
     const csv = toCSV(records);
     expect(csv.split("\n").length).toBe(2); // header + 1 row

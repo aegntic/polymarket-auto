@@ -2,7 +2,8 @@ export class BaseChainClient {
   private rpcUrl: string;
 
   constructor(rpcUrl?: string) {
-    this.rpcUrl = rpcUrl || process.env.BASE_RPC_URL || "https://sepolia.base.org";
+    this.rpcUrl =
+      rpcUrl || process.env.BASE_RPC_URL || "https://sepolia.base.org";
   }
 
   async deployToken(_name: string, _symbol: string): Promise<string> {

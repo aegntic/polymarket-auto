@@ -1,9 +1,16 @@
-import type { TokenObservation, Classification, ClassificationResult } from "../shared/types";
+import type {
+  TokenObservation,
+  Classification,
+  ClassificationResult,
+} from "../shared/types";
 
 export function levenshtein(a: string, b: string): number {
   const m = a.length;
   const n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0) as number[]);
+  const dp: number[][] = Array.from(
+    { length: m + 1 },
+    () => Array(n + 1).fill(0) as number[],
+  );
   for (let i = 0; i <= m; i++) dp[i][0] = i;
   for (let j = 0; j <= n; j++) dp[0][j] = j;
   for (let i = 1; i <= m; i++) {
@@ -28,9 +35,13 @@ export function nameSimilarity(a: string, b: string): number {
 export function extractFeatures(token: TokenObservation): number[] {
   return [
     token.holder_count_1h ? Math.min(token.holder_count_1h / 100, 1) : 0,
-    token.initial_liquidity_sol ? Math.min(token.initial_liquidity_sol / 100, 1) : 0,
+    token.initial_liquidity_sol
+      ? Math.min(token.initial_liquidity_sol / 100, 1)
+      : 0,
     token.volume_1h ? Math.min(token.volume_1h / 10000, 1) : 0,
-    token.initial_market_cap_usd ? Math.min(token.initial_market_cap_usd / 100000, 1) : 0,
+    token.initial_market_cap_usd
+      ? Math.min(token.initial_market_cap_usd / 100000, 1)
+      : 0,
   ];
 }
 
@@ -83,14 +94,18 @@ export interface EnsembleInput {
   oracle_score: number;
 }
 
-export function ensembleClassify(input: EnsembleInput): { classification: Classification; confidence: number } {
+export function ensembleClassify(input: EnsembleInput): {
+  classification: Classification;
+  confidence: number;
+} {
   const RULE_WEIGHT = 0.3;
   const ML_WEIGHT = 0.4;
   const ORACLE_WEIGHT = 0.3;
 
-  const combined = input.rule_score * RULE_WEIGHT
-    + input.ml_score * ML_WEIGHT
-    + input.oracle_score * ORACLE_WEIGHT;
+  const combined =
+    input.rule_score * RULE_WEIGHT +
+    input.ml_score * ML_WEIGHT +
+    input.oracle_score * ORACLE_WEIGHT;
 
   if (combined > 0.7) {
     return { classification: "clone", confidence: combined };

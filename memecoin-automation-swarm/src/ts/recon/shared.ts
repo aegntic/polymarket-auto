@@ -1,4 +1,3 @@
-
 import { fetchSolanaTokenInfo, fetchEvmTokenInfo } from "./rpc";
 import { Chain, TokenObservation } from "../shared/types";
 import { nameSimilarity } from "../detect/classifier";
@@ -31,13 +30,51 @@ export interface DexTokenProfile {
 }
 
 export const KNOWN_MEMECOINS = [
-  "pepe", "dogecoin", "shiba inu", "floki", "bonk", "dogwifhat", "wif",
-  "bome", "mog", "turbouo", "book of meme", "pewdiepie", "mother", "andy",
-  "landwolf", "michi", "wen", "myro", "cope", "ocean", "silly dragon",
-  "popcat", "cat in a dogs world", "maneki", "gigachad", "brett", "toshi",
-  "friend.tech", "key", "jeo boden", "tremp", "polymarket", "elysia",
-  "chain-gang", "wildfrog", "glorb", "nubcat", "moo deng", "goat",
-  "spx6900", "fwog", "gnon", "sunwukong", "cntr", "pnut",
+  "pepe",
+  "dogecoin",
+  "shiba inu",
+  "floki",
+  "bonk",
+  "dogwifhat",
+  "wif",
+  "bome",
+  "mog",
+  "turbouo",
+  "book of meme",
+  "pewdiepie",
+  "mother",
+  "andy",
+  "landwolf",
+  "michi",
+  "wen",
+  "myro",
+  "cope",
+  "ocean",
+  "silly dragon",
+  "popcat",
+  "cat in a dogs world",
+  "maneki",
+  "gigachad",
+  "brett",
+  "toshi",
+  "friend.tech",
+  "key",
+  "jeo boden",
+  "tremp",
+  "polymarket",
+  "elysia",
+  "chain-gang",
+  "wildfrog",
+  "glorb",
+  "nubcat",
+  "moo deng",
+  "goat",
+  "spx6900",
+  "fwog",
+  "gnon",
+  "sunwukong",
+  "cntr",
+  "pnut",
 ];
 
 export function mapChain(chainId: string): Chain | null {
@@ -57,8 +94,10 @@ export async function fetchLatestTokens(chain?: string): Promise<DexPair[]> {
     for (const q of queries.slice(0, 3)) {
       try {
         const resp = await fetch(`${DEXSCREENER_API}/latest/dex/search?q=${q}`);
-        const data = await resp.json() as { pairs: DexPair[] };
-        const filtered = (data.pairs || []).filter((p) => chains.includes(p.chainId));
+        const data = (await resp.json()) as { pairs: DexPair[] };
+        const filtered = (data.pairs || []).filter((p) =>
+          chains.includes(p.chainId),
+        );
         allPairs.push(...filtered);
       } catch {
         // skip
@@ -75,37 +114,46 @@ export async function fetchLatestTokens(chain?: string): Promise<DexPair[]> {
   });
 }
 
-export async function fetchTokenProfiles(chain: string): Promise<DexTokenProfile[]> {
+export async function fetchTokenProfiles(
+  chain: string,
+): Promise<DexTokenProfile[]> {
   try {
     const resp = await fetch(`${DEXSCREENER_API}/token-profiles/latest/v1`);
-    const data = await resp.json() as DexTokenProfile[];
+    const data = (await resp.json()) as DexTokenProfile[];
     return data.filter((t) => !chain || t.chainId === chain);
   } catch {
     return [];
   }
 }
 
-export async function pairToObservation(pair: DexPair): Promise<TokenObservation | null> {
+export async function pairToObservation(
+  pair: DexPair,
+): Promise<TokenObservation | null> {
   const chain = mapChain(pair.chainId);
   if (!chain) return null;
   const vol = pair.volume || { h24: 0, h6: 0, h1: 0, m5: 0 };
   const txns = pair.txns?.h24 || { buys: 0, sells: 0 };
-
 
   let decimals = chain === "solana" ? 9 : 18;
   let creator_address = "";
   let supply = "";
 
   if (chain === "solana") {
-     const info = await fetchSolanaTokenInfo(pair.baseToken.address, process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com");
-     decimals = info.decimals;
-     creator_address = info.creator_address;
-     supply = info.supply;
+    const info = await fetchSolanaTokenInfo(
+      pair.baseToken.address,
+      process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
+    );
+    decimals = info.decimals;
+    creator_address = info.creator_address;
+    supply = info.supply;
   } else if (chain === "base") {
-     const info = await fetchEvmTokenInfo(pair.baseToken.address, process.env.BASE_RPC_URL || "https://mainnet.base.org");
-     decimals = info.decimals;
-     creator_address = info.creator_address;
-     supply = info.supply;
+    const info = await fetchEvmTokenInfo(
+      pair.baseToken.address,
+      process.env.BASE_RPC_URL || "https://mainnet.base.org",
+    );
+    decimals = info.decimals;
+    creator_address = info.creator_address;
+    supply = info.supply;
   }
 
   return {
@@ -119,7 +167,10 @@ export async function pairToObservation(pair: DexPair): Promise<TokenObservation
 
     creation_tx: "",
     created_at: pair.pairCreatedAt
-      ? new Date(pair.pairCreatedAt).toISOString().replace("T", " ").slice(0, 19)
+      ? new Date(pair.pairCreatedAt)
+          .toISOString()
+          .replace("T", " ")
+          .slice(0, 19)
       : new Date().toISOString().replace("T", " ").slice(0, 19),
     metadata_uri: "",
     logo_uri: "",
@@ -131,7 +182,11 @@ export async function pairToObservation(pair: DexPair): Promise<TokenObservation
   };
 }
 
-export function quickScreen(token: TokenObservation): { isClone: boolean; similarity: number; match: string } {
+export function quickScreen(token: TokenObservation): {
+  isClone: boolean;
+  similarity: number;
+  match: string;
+} {
   const nameLower = token.name.toLowerCase();
   let maxSim = 0;
   let bestMatch = "";

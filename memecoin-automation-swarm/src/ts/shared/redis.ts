@@ -11,7 +11,10 @@ export function getRedis(): Redis {
   return redis;
 }
 
-export async function publishEvent(channel: string, envelope: EventEnvelope): Promise<void> {
+export async function publishEvent(
+  channel: string,
+  envelope: EventEnvelope,
+): Promise<void> {
   const r = getRedis();
   await r.publish(channel, JSON.stringify(envelope));
 }
@@ -49,7 +52,13 @@ export async function atomicIncrement(
     end
     return 1
   `;
-  const result = await r.eval(script, 1, key, String(windowSecs), String(limit));
+  const result = await r.eval(
+    script,
+    1,
+    key,
+    String(windowSecs),
+    String(limit),
+  );
   return result === 1;
 }
 

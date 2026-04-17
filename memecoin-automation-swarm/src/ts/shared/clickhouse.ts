@@ -12,7 +12,9 @@ export function getClickHouse(): ChClient {
   return client;
 }
 
-export async function insertObservations(batch: Record<string, unknown>[]): Promise<void> {
+export async function insertObservations(
+  batch: Record<string, unknown>[],
+): Promise<void> {
   const ch = getClickHouse();
   await ch.insert({
     table: "token_observations",
@@ -21,7 +23,9 @@ export async function insertObservations(batch: Record<string, unknown>[]): Prom
   });
 }
 
-export async function insertClassifications(batch: Record<string, unknown>[]): Promise<void> {
+export async function insertClassifications(
+  batch: Record<string, unknown>[],
+): Promise<void> {
   const ch = getClickHouse();
   await ch.insert({
     table: "classifications",
