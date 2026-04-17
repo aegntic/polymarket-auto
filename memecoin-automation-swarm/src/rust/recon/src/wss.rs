@@ -3,12 +3,31 @@ use redis::AsyncCommands;
 use reqwest;
 use serde_json::{json, Value};
 use shared::{Chain, TokenObservation};
+use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 const PUMP_FUN_PROGRAM: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfX9PNnN62P5V3z5"; // Pump.fun factory
+
+/// Syncs the list of alpha wallets from Redis.
+/// In a real prod environment, this would run on a tokio::spawn interval or listen to a pub/sub channel.
+async fn fetch_alpha_wallets(
+    redis_conn: &mut redis::aio::MultiplexedConnection,
+) -> HashSet<String> {
+    let alphas: Result<Vec<String>, redis::RedisError> =
+        redis_conn.zrange("mas:alpha_wallets", 0, -1).await;
+    match alphas {
+        Ok(wallets) => {
+            if !wallets.is_empty() {
+                debug!("Loaded {} alpha wallets from Redis", wallets.len());
+            }
+            wallets.into_iter().collect()
+        }
+        Err(_) => HashSet::new(),
+    }
+}
 
 /// Establishes a WebSocket connection to a Solana RPC and subscribes to logs for the Pump.fun program.
 /// This runs at the absolute bare metal T+0ms.
@@ -46,7 +65,19 @@ pub async fn start_sniper_listener(
     let client = redis::Client::open(redis_url)?;
     let mut redis_conn = client.get_multiplexed_async_connection().await?;
 
+    // Load initial alpha wallets
+    let mut alpha_wallets = fetch_alpha_wallets(&mut redis_conn).await;
+    let mut last_sync = SystemTime::now();
+
     while let Some(msg) = read.next().await {
+        // Sync alpha wallets every 60 seconds
+        if let Ok(elapsed) = last_sync.elapsed() {
+            if elapsed.as_secs() > 60 {
+                alpha_wallets = fetch_alpha_wallets(&mut redis_conn).await;
+                last_sync = SystemTime::now();
+            }
+        }
+
         match msg {
             Ok(Message::Text(text)) => {
                 let text_str = text.to_string();
@@ -60,23 +91,16 @@ pub async fn start_sniper_listener(
                                     if logs_str.contains("InitializeMint")
                                         || logs_str.contains("Create")
                                     {
-                                        // For simulation/scaffolding purposes, we generate a mock TokenObservation
-                                        // In production, we decode the transaction signature via RPC to get the exact mint and creator.
                                         let sig = value
                                             .get("signature")
                                             .and_then(|s| s.as_str())
                                             .unwrap_or("unknown_sig");
 
-                                        debug!(
-                                            "Detected Pump.fun Creation event! Signature: {}",
-                                            sig
-                                        );
-
-                                        // Try to decode transaction via RPC to get actual mint
+                                        // Try to decode transaction via RPC to get actual mint and creator
                                         let mut actual_mint = format!("mint_{}", &sig[0..8]);
                                         let mut actual_creator = "unknown_creator_wss".to_string();
 
-                                        let client = reqwest::Client::new();
+                                        let req_client = reqwest::Client::new();
                                         let req_body = json!({
                                             "jsonrpc": "2.0",
                                             "id": 1,
@@ -87,7 +111,11 @@ pub async fn start_sniper_listener(
                                             ]
                                         });
 
-                                        match client.post(rpc_http_url).json(&req_body).send().await
+                                        match req_client
+                                            .post(rpc_http_url)
+                                            .json(&req_body)
+                                            .send()
+                                            .await
                                         {
                                             Ok(resp) => {
                                                 if let Ok(tx_json) = resp.json::<Value>().await {
@@ -123,6 +151,19 @@ pub async fn start_sniper_listener(
                                             }
                                         }
 
+                                        // SHADOW GRAPH INTERCEPT:
+                                        // Does the creator match a known alpha burner wallet?
+                                        let is_insider = alpha_wallets.contains(&actual_creator);
+
+                                        if is_insider {
+                                            warn!("🔥 VAMPIRE SHADOW INTERCEPT! Known alpha wallet {} is deploying {}", actual_creator, actual_mint);
+                                        } else {
+                                            debug!(
+                                                "Detected Pump.fun Creation event! Signature: {}",
+                                                sig
+                                            );
+                                        }
+
                                         let now = SystemTime::now()
                                             .duration_since(UNIX_EPOCH)
                                             .unwrap()
@@ -146,7 +187,7 @@ pub async fn start_sniper_listener(
                                             initial_market_cap_usd: Some(30000.0),
                                             holder_count_1h: Some(1),
                                             volume_1h: Some(0.0),
-                                            signal_score: Some(50), // base score until TS modifies it
+                                            signal_score: Some(if is_insider { 99 } else { 50 }), // Massive boost for insiders
                                         };
 
                                         // Fire the signal to Redis instantly for RISK/DETECT modules
