@@ -250,12 +250,14 @@ app.post("/deploy", async (c) => {
     );
 
     // Mint tokens to payer's associated token account
+    // Use BigInt to avoid Number precision loss at high decimals
+    const mintAmount = BigInt(supply) * BigInt(10 ** decimals);
     const mintTx = new Transaction().add(
       createMintToInstruction(
         mintKeypair.publicKey,
         payerTokenAccount.address,
         payer.publicKey,
-        supply * Math.pow(10, decimals),
+        mintAmount,
         [],
         TOKEN_PROGRAM_ID,
       ),
@@ -318,10 +320,9 @@ app.get("/signals", async (c) => {
   const chain = c.req.query("chain");
   const limit = parseInt(c.req.query("limit") || "50", 10);
 
-  let chainFilter = "";
-  if (chain && chain !== "all") {
-    chainFilter = `AND o.chain = '${chain}'`;
-  }
+  const safeLimit = Math.max(1, Math.min(limit, 500));
+  const allowedChains = ["solana", "base", "bnb"];
+  const safeChain = chain && chain !== "all" && allowedChains.includes(chain) ? chain : null;
 
   try {
     const rows = await ch.query<{
@@ -343,9 +344,10 @@ app.get("/signals", async (c) => {
                  ROW_NUMBER() OVER (PARTITION BY token_address, chain ORDER BY classified_at DESC) as rn
           FROM clonet.classifications
         ) c ON o.token_address = c.token_address AND o.chain = c.chain AND c.rn = 1
-        WHERE 1=1 ${chainFilter}
+        WHERE 1=1 ${safeChain ? "AND o.chain = {chain:String}" : ""}
         ORDER BY o.first_seen_at DESC
-        LIMIT ${limit}`,
+        LIMIT ${safeLimit}`,
+      safeChain ? { chain: safeChain } : undefined,
     );
 
     const now = Date.now();
@@ -425,7 +427,7 @@ app.get("/circuit-breaker", async (c) => {
 // Classifications
 // ---------------------------------------------------------------------------
 app.get("/classifications", async (c) => {
-  const limit = parseInt(c.req.query("limit") || "50", 10);
+  const limit = Math.max(1, Math.min(parseInt(c.req.query("limit") || "50", 10), 500));
 
   try {
     const rows = await ch.query<{
@@ -469,7 +471,7 @@ app.get("/classifications", async (c) => {
 // Deployments
 // ---------------------------------------------------------------------------
 app.get("/deployments", async (c) => {
-  const limit = parseInt(c.req.query("limit") || "50", 10);
+  const limit = Math.max(1, Math.min(parseInt(c.req.query("limit") || "50", 10), 500));
 
   try {
     const rows = await ch.query<{
@@ -584,8 +586,11 @@ app.post("/classify", async (c) => {
   };
 
   try {
+    const allowedChains = ["solana", "base", "bnb"];
+    const safeChain = allowedChains.includes(body.chain) ? body.chain : "solana";
     const rows = await ch.query<TokenObservation>(
-      `SELECT * FROM clonet.token_observations WHERE token_address = '${body.token_address}' AND chain = '${body.chain}' ORDER BY first_seen_at DESC LIMIT 1`,
+      `SELECT * FROM clonet.token_observations WHERE token_address = {addr:String} AND chain = {chain:String} ORDER BY first_seen_at DESC LIMIT 1`,
+      { addr: body.token_address, chain: safeChain },
     );
     if (rows.length > 0) observation = { ...observation, ...rows[0] };
   } catch {

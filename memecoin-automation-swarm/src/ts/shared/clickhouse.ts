@@ -34,11 +34,15 @@ export async function insertClassifications(
   });
 }
 
-export async function query<T>(sql: string): Promise<T[]> {
+export async function query<T>(
+  sql: string,
+  params?: Record<string, unknown>,
+): Promise<T[]> {
   const ch = getClickHouse();
   const result = await ch.query({
     query: sql,
     format: "JSONEachRow",
+    query_params: params,
   });
   return (await result.json()) as T[];
 }
