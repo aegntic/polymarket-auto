@@ -13,7 +13,8 @@
     "sourceMap": true,
     "outDir": "dist",
     "rootDir": "src/ts",
-    "types": ["bun-types"],
+    "types": ["bun-types", "jest"],
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": ["./src/ts/*"]
     }
