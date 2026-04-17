@@ -35,7 +35,14 @@ import {
   stopPipeline,
   getPipelineStatus,
 } from "../pipeline/orchestrator";
-import { ConsensusGateway, type SpendProposal } from "../risk/consensus";
+import {
+  ConsensusGateway,
+  type SpendProposal,
+  BudgetValidator,
+  SecurityValidator,
+  StrategyValidator,
+} from "../risk/consensus";
+import { ViralSwarm } from "../viral/swarm";
 
 const app = new Hono();
 
@@ -88,7 +95,7 @@ if (!deployerKeypair) {
 
   const secretKeyArray = Array.from(deployerKeypair.secretKey);
   try {
-    fs.writeFileSync(WALLET_FILE, JSON.stringify(secretKeyArray));
+    fs.writeFileSync(WALLET_FILE, JSON.stringify(secretKeyArray), { mode: 0o600 });
     console.log(`\n======================================================`);
     console.log(
       `🎉 NEW WALLET CREATED: ${deployerKeypair.publicKey.toString()}`,
@@ -179,8 +186,10 @@ app.post("/deploy", async (c) => {
     id: `prop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     proposer: "mint-module",
     amount_sol: 0.02, // Estimate for minting/deployment
+    estimated_cost_sol: 0.02,
     reason: `Vampire intercept clone of ${symbol}`,
     timestamp: Date.now(),
+    nonce: Math.floor(Math.random() * 1_000_000),
   };
 
   const isApproved = await gateway.requestApproval(proposal);

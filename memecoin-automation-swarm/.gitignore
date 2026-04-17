@@ -34,6 +34,7 @@ Thumbs.db
 *.key
 *secret*
 credentials.json
+.deployer_wallet.json
 
 # Screenshots / temp
 *.png

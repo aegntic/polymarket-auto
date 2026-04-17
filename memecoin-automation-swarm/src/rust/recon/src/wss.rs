@@ -125,6 +125,7 @@ pub async fn start_sniper_listener(
                                                         .get("result")
                                                         .and_then(|r| r.get("meta"))
                                                     {
+                                                        // Extract mint address and creator from postTokenBalances
                                                         if let Some(post_tokens) = meta
                                                             .get("postTokenBalances")
                                                             .and_then(|pt| pt.as_array())
@@ -143,29 +144,96 @@ pub async fn start_sniper_listener(
                                                                     actual_creator =
                                                                         owner.to_string();
                                                                 }
-                                                                if let Some(ui_token_amount) =
-                                                                    post_tokens[0]
-                                                                        .get("uiTokenAmount")
+                                                            }
+                                                        }
+
+                                                        // Extract token name/symbol from inner instructions.
+                                                        // postTokenBalances[].uiTokenAmount only has
+                                                        // amount/decimals, NOT metadata. Name and symbol
+                                                        // come from Metaplex CreateMetadata instructions
+                                                        // parsed in the innerInstructions array.
+                                                        if let Some(inner) = meta
+                                                            .get("innerInstructions")
+                                                            .and_then(|i| i.as_array())
+                                                        {
+                                                            for group in inner {
+                                                                if let Some(instructions) =
+                                                                    group.get("instructions")
+                                                                        .and_then(|i| i.as_array())
                                                                 {
-                                                                    if let Some(name) =
-                                                                        ui_token_amount
-                                                                            .get("name")
-                                                                            .and_then(|n| {
-                                                                                n.as_str()
+                                                                    for ix in instructions {
+                                                                        if let Some(args) = ix
+                                                                            .get("parsed")
+                                                                            .and_then(|p| {
+                                                                                p.get("args")
                                                                             })
-                                                                    {
-                                                                        token_name =
-                                                                            name.to_string();
+                                                                        {
+                                                                            if let Some(n) = args
+                                                                                .get("name")
+                                                                                .and_then(|n| {
+                                                                                    n.as_str()
+                                                                                })
+                                                                            {
+                                                                                if !n.is_empty() {
+                                                                                    token_name =
+                                                                                        n.to_string();
+                                                                                }
+                                                                            }
+                                                                            if let Some(s) = args
+                                                                                .get("symbol")
+                                                                                .and_then(|s| {
+                                                                                    s.as_str()
+                                                                                })
+                                                                            {
+                                                                                if !s.is_empty() {
+                                                                                    token_symbol =
+                                                                                        s.to_string();
+                                                                                }
+                                                                            }
+                                                                        }
                                                                     }
-                                                                    if let Some(symbol) =
-                                                                        ui_token_amount
-                                                                            .get("symbol")
-                                                                            .and_then(|s| {
-                                                                                s.as_str()
-                                                                            })
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Fallback: parse name/symbol from log messages.
+                                                        // Pump.fun emits metadata in program logs.
+                                                        if token_name == "Unknown_WSS" {
+                                                            if let Some(log_msgs) = meta
+                                                                .get("logMessages")
+                                                                .and_then(|l| l.as_array())
+                                                            {
+                                                                for log in log_msgs {
+                                                                    if let Some(log_str) =
+                                                                        log.as_str()
                                                                     {
-                                                                        token_symbol =
-                                                                            symbol.to_string();
+                                                                        if log_str.contains("Create")
+                                                                        {
+                                                                            if let Some(data) =
+                                                                                log_str
+                                                                                    .split("Create ")
+                                                                                    .nth(1)
+                                                                            {
+                                                                                let parts: Vec<&str> =
+                                                                                    data
+                                                                                        .split(',')
+                                                                                        .collect();
+                                                                                if parts.len() >= 2 {
+                                                                                    let n = parts[0]
+                                                                                        .trim()
+                                                                                        .trim_matches('"');
+                                                                                    let s = parts[1]
+                                                                                        .trim()
+                                                                                        .trim_matches('"');
+                                                                                    if !n.is_empty() {
+                                                                                        token_name = n.to_string();
+                                                                                    }
+                                                                                    if !s.is_empty() {
+                                                                                        token_symbol = s.to_string();
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
                                                                     }
                                                                 }
                                                             }

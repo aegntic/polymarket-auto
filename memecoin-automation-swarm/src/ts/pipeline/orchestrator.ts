@@ -20,7 +20,8 @@ export async function triggerAutoDeploy(
   obs: TokenObservation,
 ): Promise<string | null> {
   try {
-    const response = await fetch("http://localhost:3000/deploy", {
+    const baseUrl = `http://localhost:${process.env.PORT || "8080"}`;
+    const response = await fetch(`${baseUrl}/deploy`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -38,8 +39,8 @@ export async function triggerAutoDeploy(
       return null;
     }
 
-    const data = await response.json();
-    return data.mintAddress;
+    const json = await response.json();
+    return json?.data?.mintAddress ?? null;
   } catch (err) {
     console.error("[Pipeline] Auto-deploy error:", err);
     return null;
