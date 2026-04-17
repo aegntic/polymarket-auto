@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Chain, Classification, CircuitBreakerLevel, Network, SignalScore, TokenAddress};
+    use crate::{Chain, CircuitBreakerLevel, Classification, Network, SignalScore, TokenAddress};
 
     #[test]
     fn chain_display() {

@@ -35,8 +35,7 @@ pub struct RedisPool {
 
 impl RedisPool {
     pub async fn new(url: &str) -> Result<Self> {
-        let client = redis::Client::open(url)
-            .context("failed to create Redis client")?;
+        let client = redis::Client::open(url).context("failed to create Redis client")?;
         let conn = client
             .get_multiplexed_async_connection()
             .await
@@ -45,8 +44,7 @@ impl RedisPool {
     }
 
     pub async fn publish(&mut self, channel: &str, event: &EventEnvelope) -> Result<()> {
-        let payload = serde_json::to_string(event)
-            .context("failed to serialize event envelope")?;
+        let payload = serde_json::to_string(event).context("failed to serialize event envelope")?;
         redis::cmd("PUBLISH")
             .arg(channel)
             .arg(payload)

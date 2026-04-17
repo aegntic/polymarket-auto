@@ -2,8 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use shared::redis_client::RedisPool;
 use shared::{
-    Chain, CloneStrategy, EventEnvelope, TokenAddress, TokenObservation,
-    CHANNEL_MINT_DEPLOYED,
+    Chain, CloneStrategy, EventEnvelope, TokenAddress, TokenObservation, CHANNEL_MINT_DEPLOYED,
 };
 use tracing::{info, warn};
 
@@ -44,8 +43,14 @@ impl MintService {
         match strategy {
             CloneStrategy::Substitution => {
                 let substitutions = [
-                    ('o', '0'), ('i', '1'), ('l', '1'), ('e', '3'),
-                    ('a', '4'), ('s', '5'), ('t', '7'), ('b', '8'),
+                    ('o', '0'),
+                    ('i', '1'),
+                    ('l', '1'),
+                    ('e', '3'),
+                    ('a', '4'),
+                    ('s', '5'),
+                    ('t', '7'),
+                    ('b', '8'),
                 ];
                 let mut result = original_name.to_string();
                 for (from, to) in substitutions {
@@ -58,8 +63,11 @@ impl MintService {
             }
             CloneStrategy::Homophone => {
                 let homophones = [
-                    ("doge", "dogi"), ("moon", "moon"), ("pepe", "peppe"),
-                    ("elon", "ellon"), ("safe", "saife"),
+                    ("doge", "dogi"),
+                    ("moon", "moon"),
+                    ("pepe", "peppe"),
+                    ("elon", "ellon"),
+                    ("safe", "saife"),
                 ];
                 let lower = original_name.to_lowercase();
                 for (from, to) in homophones {
@@ -76,8 +84,12 @@ impl MintService {
             }
             CloneStrategy::Unicode => {
                 let lookalikes = [
-                    ('a', '\u{0430}'), ('e', '\u{0435}'), ('o', '\u{043E}'),
-                    ('p', '\u{0440}'), ('c', '\u{0441}'), ('x', '\u{0445}'),
+                    ('a', '\u{0430}'),
+                    ('e', '\u{0435}'),
+                    ('o', '\u{043E}'),
+                    ('p', '\u{0440}'),
+                    ('c', '\u{0441}'),
+                    ('x', '\u{0445}'),
                 ];
                 let mut result = original_name.to_string();
                 for (ascii, cyrillic) in lookalikes {
@@ -118,8 +130,15 @@ impl MintService {
 
         // In production: create SPL token on-chain via Solana RPC
         // For devnet: simulate with a random address
-        let address = format!("{}{}", metadata.name.replace(' ', ""),
-            uuid::Uuid::new_v4().to_string().replace('-', "").chars().take(12).collect::<String>()
+        let address = format!(
+            "{}{}",
+            metadata.name.replace(' ', ""),
+            uuid::Uuid::new_v4()
+                .to_string()
+                .replace('-', "")
+                .chars()
+                .take(12)
+                .collect::<String>()
         );
 
         let event = EventEnvelope::new(

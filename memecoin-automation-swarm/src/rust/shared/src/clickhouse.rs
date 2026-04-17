@@ -22,11 +22,7 @@ impl ClickHouseClient {
         }
     }
 
-    pub async fn insert<T: Serialize>(
-        &self,
-        table: &str,
-        batch: &[T],
-    ) -> Result<()> {
+    pub async fn insert<T: Serialize>(&self, table: &str, batch: &[T]) -> Result<()> {
         if batch.is_empty() {
             return Ok(());
         }
@@ -37,7 +33,10 @@ impl ClickHouseClient {
             .collect::<Result<Vec<_>, _>>()?
             .join("\n");
 
-        let url = format!("{}&query=INSERT+INTO+{}+FORMAT+JSONEachRow", self.base_url, table);
+        let url = format!(
+            "{}&query=INSERT+INTO+{}+FORMAT+JSONEachRow",
+            self.base_url, table
+        );
 
         self.client
             .post(&url)
@@ -73,7 +72,13 @@ impl ClickHouseClient {
     }
 
     pub async fn ping(&self) -> Result<bool> {
-        let url = format!("{}/ping", self.base_url.split('/').next().unwrap_or("http://localhost:8123"));
+        let url = format!(
+            "{}/ping",
+            self.base_url
+                .split('/')
+                .next()
+                .unwrap_or("http://localhost:8123")
+        );
         let result = self
             .client
             .get(&url)

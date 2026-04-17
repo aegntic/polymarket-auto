@@ -1,1 +1,0 @@
-/home/ae/.claude/skills/gstack/ship/SKILL.md

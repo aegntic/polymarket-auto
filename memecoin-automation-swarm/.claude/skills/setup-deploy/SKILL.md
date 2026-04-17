@@ -1,1 +1,0 @@
-/home/ae/.claude/skills/gstack/setup-deploy/SKILL.md

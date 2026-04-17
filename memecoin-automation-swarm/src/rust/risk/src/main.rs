@@ -1,6 +1,6 @@
 use anyhow::Result;
-use shared::redis_client::RedisPool;
 use risk::{RiskConfig, RiskService};
+use shared::redis_client::RedisPool;
 
 #[tokio::main]
 async fn main() -> Result<()> {

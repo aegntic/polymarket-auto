@@ -1,6 +1,6 @@
 use anyhow::Result;
-use shared::redis_client::RedisPool;
 use recon::{ReconConfig, ReconService};
+use shared::redis_client::RedisPool;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -9,17 +9,16 @@ async fn main() -> Result<()> {
         .init();
 
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
-    let rpc_url = std::env::var("SOLANA_RPC_URL").unwrap_or_else(|_| "http://localhost:8899".into());
+    let rpc_ws_url =
+        std::env::var("SOLANA_RPC_WS_URL").unwrap_or_else(|_| "ws://localhost:8900".into());
 
-    let redis = RedisPool::new(&redis_url).await?;
+    let _redis = RedisPool::new(&redis_url).await?; // keep if needed or ignore
     let config = ReconConfig {
-        rpc_url,
-        chain: shared::Chain::Solana,
-        network: shared::Network::Devnet,
-        signal_weights: Default::default(),
+        redis_url: redis_url.clone(),
+        rpc_ws_url,
     };
 
-    let mut service = ReconService::new(config, redis);
+    let service = ReconService::new(config);
     service.start().await?;
 
     tokio::signal::ctrl_c().await?;

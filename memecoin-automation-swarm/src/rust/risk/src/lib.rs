@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use shared::redis_client::RedisPool;
 use shared::{CircuitBreakerLevel, EventEnvelope, CHANNEL_RISK_ALERTS};
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskConfig {
@@ -51,16 +51,20 @@ impl RiskService {
     }
 
     pub async fn check_llm_budget(&mut self) -> Result<bool> {
-        let key = format!("mas:risk:llm_cost:{}", chrono::Utc::now().format("%Y-%m-%d"));
+        let key = format!(
+            "mas:risk:llm_cost:{}",
+            chrono::Utc::now().format("%Y-%m-%d")
+        );
         let current: Option<String> = self.redis.get(&key).await?;
-        let current_cost: f64 = current
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0.0);
+        let current_cost: f64 = current.and_then(|v| v.parse().ok()).unwrap_or(0.0);
         Ok(current_cost < self.config.llm_budget_usd_per_day)
     }
 
     pub async fn record_llm_cost(&mut self, cost_usd: f64) -> Result<()> {
-        let key = format!("mas:risk:llm_cost:{}", chrono::Utc::now().format("%Y-%m-%d"));
+        let key = format!(
+            "mas:risk:llm_cost:{}",
+            chrono::Utc::now().format("%Y-%m-%d")
+        );
         self.redis
             .incr_by_float(&key, cost_usd)
             .await
@@ -69,7 +73,10 @@ impl RiskService {
     }
 
     pub async fn evaluate_circuit_breaker(&mut self) -> Result<CircuitBreakerLevel> {
-        let key = format!("mas:risk:hourly:{}", chrono::Utc::now().format("%Y-%m-%d-%H"));
+        let key = format!(
+            "mas:risk:hourly:{}",
+            chrono::Utc::now().format("%Y-%m-%d-%H")
+        );
         let current: Option<String> = self.redis.get(&key).await?;
         let count: u64 = current.and_then(|v| v.parse().ok()).unwrap_or(0);
 
