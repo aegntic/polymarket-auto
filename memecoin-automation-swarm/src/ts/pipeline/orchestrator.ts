@@ -1,6 +1,7 @@
 import * as ch from "../shared/clickhouse";
 import * as redis from "../shared/redis";
 import { OracleClassifier } from "../oracle/classifier";
+import { NarrativeEngine } from "../viral/narratives";
 import {
   fetchLatestTokens,
   pairToObservation,
@@ -20,7 +21,9 @@ export async function runReconLoop() {
   try {
     const pairs = await fetchLatestTokens();
     const rawObs = await Promise.all(pairs.map(pairToObservation));
-    const observations = rawObs.filter((o): o is TokenObservation => o !== null);
+    const observations = rawObs.filter(
+      (o): o is TokenObservation => o !== null,
+    );
 
     if (observations.length > 0) {
       const screened = observations.map((obs) => ({
@@ -86,15 +89,51 @@ export async function runReconLoop() {
 
 export async function startClassifierSubscriber() {
   const oracle = new OracleClassifier();
+  const narrativeEngine = new NarrativeEngine();
 
+  // Listen to both the TS polling recon and the Rust fast-path sniper
   redis.subscribeToChannel("recon:signals", async (envelope: EventEnvelope) => {
-    if (envelope.event_type !== "token_detected") return;
+    // Rust fast-path sends "signal_detected", TS polling sends "token_detected"
+    if (
+      envelope.event_type !== "token_detected" &&
+      envelope.event_type !== "signal_detected"
+    )
+      return;
 
     try {
-      const { obs, match, similarity } = envelope.payload as any;
+      let obs: TokenObservation;
+      let match = "";
+      let similarity = 0;
+
+      if (envelope.event_type === "signal_detected") {
+        // From Rust
+        obs = envelope.payload as TokenObservation;
+        console.log(`[Pipeline] HOT PATH SIGNAL received for ${obs.symbol}`);
+      } else {
+        // From TS
+        const payload = envelope.payload as any;
+        obs = payload.obs;
+        match = payload.match;
+        similarity = payload.similarity;
+      }
 
       classificationsInProgress++;
       try {
+        // Calculate Narrative Distance
+        const narrativeScore = await narrativeEngine.calculateNarrativeDistance(
+          obs.name,
+          obs.symbol,
+        );
+
+        let narrativeReasoning = "";
+        if (narrativeScore.match) {
+          narrativeReasoning = ` Narrative Distance: ${narrativeScore.distance.toFixed(1)} (Matched: "${narrativeScore.match.content.substring(0, 30)}...")`;
+        } else {
+          narrativeReasoning = " Narrative Distance: 100 (No match)";
+        }
+
+        console.log(`[Pipeline] ${obs.symbol} ${narrativeReasoning}`);
+
         const result = await oracle.classify(obs);
         console.log(
           `[Pipeline] Classified ${obs.symbol}: ${result.classification} @ ${result.confidence.toFixed(2)}`,
@@ -109,7 +148,7 @@ export async function startClassifierSubscriber() {
             original_token: match || "",
             reasoning:
               result.reasoning +
-              ` | Rule-based similarity: ${similarity.toFixed(3)} to "${match}"`,
+              ` | Rule-based similarity: ${similarity.toFixed(3)} to "${match}" | ${narrativeReasoning}`,
             classified_at: new Date()
               .toISOString()
               .replace("T", " ")
