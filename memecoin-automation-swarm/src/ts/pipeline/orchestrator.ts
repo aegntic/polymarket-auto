@@ -2,6 +2,7 @@ import * as ch from "../shared/clickhouse";
 import * as redis from "../shared/redis";
 import { OracleClassifier } from "../oracle/classifier";
 import { NarrativeEngine } from "../viral/narratives";
+import { AlphaDiscoveryEngine } from "../recon/insider_graph";
 import {
   fetchLatestTokens,
   pairToObservation,
@@ -12,7 +13,29 @@ import { EventEnvelope } from "../shared/types";
 
 let isRunning = false;
 let timeoutId: NodeJS.Timeout | null | number = null;
+let alphaCronId: NodeJS.Timeout | null | number = null;
 let classificationsInProgress = 0;
+
+export async function runAlphaDiscoveryLoop() {
+  if (!isRunning) return;
+  const alphaEngine = new AlphaDiscoveryEngine();
+
+  try {
+    await alphaEngine.runDiscoveryCycle();
+  } catch (err) {
+    console.error("[Pipeline] AlphaGraph error:", err);
+  }
+
+  // Schedule next discovery run (every 10 minutes)
+  if (isRunning) {
+    alphaCronId = setTimeout(
+      () => {
+        runAlphaDiscoveryLoop().catch(console.error);
+      },
+      10 * 60 * 1000,
+    );
+  }
+}
 
 export async function runReconLoop() {
   if (!isRunning) return;
@@ -173,6 +196,7 @@ export function startPipeline() {
 
   startClassifierSubscriber().catch(console.error);
   runReconLoop().catch(console.error);
+  runAlphaDiscoveryLoop().catch(console.error);
 }
 
 export function stopPipeline() {
@@ -180,6 +204,10 @@ export function stopPipeline() {
   if (timeoutId) {
     clearTimeout(timeoutId);
     timeoutId = null;
+  }
+  if (alphaCronId) {
+    clearTimeout(alphaCronId);
+    alphaCronId = null;
   }
   console.log("[Pipeline] Stopped orchestrator.");
 }
