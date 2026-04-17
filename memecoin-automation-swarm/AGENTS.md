@@ -53,7 +53,7 @@ Agents communicate _exclusively_ through Redis pub/sub channels:
 ### VIRAL Module Constraints (Social Media)
 
 - **Scope:** Automated posting to X/Telegram/Discord for bait clones, narrative seeding via LLMs, engagement tracking.
-- **Rules:** Never impersonate specific real projects or communities. No anti-detect browser infrastructure. All mainnet bait tokens must be indistinguishable from genuine clone tokens on-chain (provenance tags are internal only).
+- **Rules:** Never impersonate specific real projects or communities. All mainnet bait tokens must be indistinguishable from genuine clone tokens on-chain (provenance tags are internal only).
 
 ## 3. Rate Limits, Budget, and Safety constraints (RISK Module)
 
