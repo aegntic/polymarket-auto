@@ -7,6 +7,7 @@ import * as path from "path";
 import * as redis from "../shared/redis";
 import * as ch from "../shared/clickhouse";
 import { MasError, ERROR_CODES, CHANNELS } from "../shared/types";
+import * as metrics from "../monitoring/metrics";
 import type {
   TokenObservation,
 } from "../shared/types";
@@ -119,6 +120,12 @@ app.get("/health", async (c) => {
     clickhouse: chOk ? "connected" : "disconnected",
     pipeline: getPipelineStatus(),
     timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/metrics", (c) => {
+  return c.text(metrics.metricsOutput(), 200, {
+    "Content-Type": "text/plain; version=0.0.4",
   });
 });
 
@@ -255,6 +262,7 @@ app.post("/deploy", async (c) => {
     ]);
 
     // Notify the Rust pipeline that a deployment occurred
+    metrics.inc("mas_clone_deployments_total", { chain: "solana", strategy: "substitution" });
     await redis.publishEvent(CHANNELS.MINT_DEPLOYED, {
       timestamp: new Date().toISOString(),
       module: "api",

@@ -52,6 +52,7 @@ export class SwarmMonitor {
     profit: number;
     success: boolean;
   }[] = [];
+  private static readonly MAX_HISTORY = 1000;
 
   // eslint-disable-next-line no-unused-vars
   constructor(private options: SwarmMonitorOptions) {
@@ -305,6 +306,9 @@ export class SwarmMonitor {
         profit,
         success: true,
       });
+      if (this.deploymentHistory.length > SwarmMonitor.MAX_HISTORY) {
+        this.deploymentHistory = this.deploymentHistory.slice(-SwarmMonitor.MAX_HISTORY);
+      }
 
       await this.collectMetrics();
     }
