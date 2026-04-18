@@ -81,15 +81,17 @@ export function createEnvelope(
   };
 }
 
-// Redis channel constants
+// Redis channel constants — all use mas: prefix
 export const CHANNELS = {
   RECON_SIGNALS: "mas:recon:signals",
   MINT_DEPLOYED: "mas:mint:deployed",
+  MINT_DEPLOY_REQUEST: "mas:mint:deploy_request",
   DETECT_RESULTS: "mas:detect:results",
   RISK_ALERTS: "mas:risk:alerts",
   ORACLE_RESULTS: "mas:oracle:results",
   TXENG_STATUS: "mas:txeng:status",
   ECONOMY_SETTLED: "mas:economy:settled",
+  VIRAL_POSTS: "mas:viral:posts",
 } as const;
 
 // Error codes

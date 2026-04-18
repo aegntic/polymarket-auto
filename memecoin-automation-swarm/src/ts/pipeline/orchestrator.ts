@@ -9,7 +9,7 @@ import {
   quickScreen,
 } from "../recon/shared";
 import type { TokenObservation } from "../shared/types";
-import { EventEnvelope } from "../shared/types";
+import { EventEnvelope, CHANNELS } from "../shared/types";
 
 let isRunning = false;
 let timeoutId: NodeJS.Timeout | null | number = null;
@@ -141,7 +141,7 @@ export async function runReconLoop() {
         .slice(0, 15);
 
       for (const { obs, screen } of toClassify) {
-        await redis.publishEvent("recon:signals", {
+        await redis.publishEvent(CHANNELS.RECON_SIGNALS, {
           timestamp: Date.now().toString(),
           module: "recon",
           event_type: "token_detected",
@@ -166,7 +166,7 @@ export async function startClassifierSubscriber() {
   const narrativeEngine = new NarrativeEngine();
 
   // Listen to both the TS polling recon and the Rust fast-path sniper
-  redis.subscribeToChannel("recon:signals", async (envelope: EventEnvelope) => {
+  redis.subscribeToChannel(CHANNELS.RECON_SIGNALS, async (envelope: EventEnvelope) => {
     // Rust fast-path sends "signal_detected", TS polling sends "token_detected"
     if (
       envelope.event_type !== "token_detected" &&

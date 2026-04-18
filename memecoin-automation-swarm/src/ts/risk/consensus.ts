@@ -1,4 +1,5 @@
 import * as redis from "../shared/redis";
+import { CHANNELS } from "../shared/types";
 
 export interface SpendProposal {
   id: string;
@@ -91,7 +92,7 @@ export class ConsensusGateway {
         `\n[ConsensusGateway] Consensus REACHED for proposal ${proposal.id}\n`,
       );
       await redisClient.publish(
-        "risk:settlement",
+        CHANNELS.ECONOMY_SETTLED,
         JSON.stringify({ event: "consensus_reached", proposalId: proposal.id }),
       );
     } else {
@@ -99,7 +100,7 @@ export class ConsensusGateway {
         `\n[ConsensusGateway] Consensus REJECTED for proposal ${proposal.id}\n`,
       );
       await redisClient.publish(
-        "risk:alerts",
+        CHANNELS.RISK_ALERTS,
         JSON.stringify({
           event: "consensus_rejected",
           proposalId: proposal.id,
@@ -111,5 +112,6 @@ export class ConsensusGateway {
 }
 
 // Exported default instance configured with threshold from env
-const threshold = Number(process.env.CONSENSUS_THRESHOLD) || 4;
+// Default: all 3 validators must agree (Budget + Security + Strategy)
+const threshold = Number(process.env.CONSENSUS_THRESHOLD) || 3;
 export const gateway = new ConsensusGateway(threshold);

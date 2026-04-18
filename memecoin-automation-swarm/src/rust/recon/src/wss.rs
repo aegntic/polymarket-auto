@@ -2,7 +2,7 @@ use futures_util::stream::StreamExt;
 use redis::AsyncCommands;
 use reqwest;
 use serde_json::{json, Value};
-use shared::{Chain, TokenObservation};
+use shared::{Chain, TokenObservation, CHANNEL_RECON_SIGNALS};
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
@@ -294,7 +294,7 @@ pub async fn start_sniper_listener(
                                         });
 
                                         let _: () = redis_conn
-                                            .publish("recon:signals", payload.to_string())
+                                            .publish(CHANNEL_RECON_SIGNALS, payload.to_string())
                                             .await?;
                                         info!("Fast-pathed new mint signal to Redis! Sig: {}", sig);
                                     }

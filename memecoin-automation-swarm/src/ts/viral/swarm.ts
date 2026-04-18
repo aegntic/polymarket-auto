@@ -1,5 +1,5 @@
 import { publishEvent } from "../shared/redis";
-import { TokenObservation } from "../shared/types";
+import { TokenObservation, CHANNELS } from "../shared/types";
 import { NarrativeEngine } from "./narratives";
 
 export class ViralSwarm {
@@ -36,7 +36,7 @@ export class ViralSwarm {
       console.log(`[VIRAL] Spinning up ${profileId}...`);
       console.log(`[VIRAL] [${profileId}] Generated message: ${message}`);
 
-      await publishEvent("viral:posts", {
+      await publishEvent(CHANNELS.VIRAL_POSTS, {
         timestamp: Date.now().toString(),
         module: "viral",
         event_type: "post_generated",

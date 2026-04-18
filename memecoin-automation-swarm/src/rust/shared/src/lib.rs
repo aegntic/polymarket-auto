@@ -175,11 +175,13 @@ impl EventEnvelope {
 
 pub const CHANNEL_RECON_SIGNALS: &str = "mas:recon:signals";
 pub const CHANNEL_MINT_DEPLOYED: &str = "mas:mint:deployed";
+pub const CHANNEL_MINT_DEPLOY_REQUEST: &str = "mas:mint:deploy_request";
 pub const CHANNEL_DETECT_RESULTS: &str = "mas:detect:results";
 pub const CHANNEL_RISK_ALERTS: &str = "mas:risk:alerts";
 pub const CHANNEL_ORACLE_RESULTS: &str = "mas:oracle:results";
 pub const CHANNEL_TXENG_STATUS: &str = "mas:txeng:status";
 pub const CHANNEL_ECONOMY_SETTLED: &str = "mas:economy:settled";
+pub const CHANNEL_VIRAL_POSTS: &str = "mas:viral:posts";
 
 // --- Error Codes ---
 
