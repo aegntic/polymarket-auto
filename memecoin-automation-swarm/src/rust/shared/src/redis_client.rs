@@ -31,6 +31,7 @@ return 1
 #[derive(Clone)]
 pub struct RedisPool {
     conn: MultiplexedConnection,
+    client: redis::Client,
 }
 
 impl RedisPool {
@@ -40,7 +41,7 @@ impl RedisPool {
             .get_multiplexed_async_connection()
             .await
             .context("failed to create Redis multiplexed connection")?;
-        Ok(Self { conn })
+        Ok(Self { conn, client })
     }
 
     pub async fn publish(&mut self, channel: &str, event: &EventEnvelope) -> Result<()> {
@@ -114,5 +115,14 @@ impl RedisPool {
 
     pub fn conn(&self) -> MultiplexedConnection {
         self.conn.clone()
+    }
+
+    pub async fn pubsub(&self) -> Result<redis::aio::PubSub> {
+        let pubsub = self
+            .client
+            .get_async_pubsub()
+            .await
+            .context("failed to create Redis pubsub connection")?;
+        Ok(pubsub)
     }
 }

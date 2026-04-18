@@ -17,8 +17,15 @@ async fn main() -> Result<()> {
         max_clone_per_day: 50,
     };
 
-    let _service = MintService::new(config, redis);
-    tracing::info!("MINT service ready");
+    let mut service = MintService::new(config, redis);
+    tracing::info!("MINT service starting...");
+
+    // Run subscriber loop in background
+    tokio::spawn(async move {
+        if let Err(e) = service.start().await {
+            tracing::error!("MINT subscriber loop failed: {}", e);
+        }
+    });
 
     tokio::signal::ctrl_c().await?;
     tracing::info!("MINT shutting down");

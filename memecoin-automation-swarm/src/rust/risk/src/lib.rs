@@ -110,8 +110,51 @@ impl RiskService {
         info!(
             max_per_day = self.config.max_clone_per_day,
             budget = self.config.llm_budget_usd_per_day,
-            "RISK service starting"
+            "RISK service starting periodic circuit breaker evaluation"
         );
-        Ok(())
+
+        // Also subscribe to recon signals to track hourly volume
+        let mut pubsub = self.redis.pubsub().await?;
+        pubsub
+            .subscribe(shared::CHANNEL_RECON_SIGNALS)
+            .await
+            .context("failed to subscribe to recon signals")?;
+
+        use futures_util::StreamExt;
+        let mut stream = pubsub.on_message();
+        let mut eval_interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+
+        loop {
+            tokio::select! {
+                Some(_msg) = stream.next() => {
+                    // Count each recon signal toward hourly rate
+                    let hour_key = format!(
+                        "mas:risk:hourly:{}",
+                        chrono::Utc::now().format("%Y-%m-%d-%H")
+                    );
+                    let _ = self.redis.incr(&hour_key).await;
+                }
+                _ = eval_interval.tick() => {
+                    match self.evaluate_circuit_breaker().await {
+                        Ok(level) => {
+                            if level != CircuitBreakerLevel::Green {
+                                warn!(?level, "Circuit breaker status");
+                            }
+                        }
+                        Err(e) => error!("Circuit breaker evaluation failed: {}", e),
+                    }
+
+                    // Check LLM budget
+                    match self.check_llm_budget().await {
+                        Ok(within_budget) => {
+                            if !within_budget {
+                                warn!("LLM daily budget exceeded");
+                            }
+                        }
+                        Err(e) => error!("Budget check failed: {}", e),
+                    }
+                }
+            }
+        }
     }
 }

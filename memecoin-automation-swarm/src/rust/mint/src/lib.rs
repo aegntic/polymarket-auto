@@ -2,9 +2,10 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use shared::redis_client::RedisPool;
 use shared::{
-    Chain, CloneStrategy, EventEnvelope, TokenAddress, TokenObservation, CHANNEL_MINT_DEPLOYED,
+    Chain, CloneStrategy, EventEnvelope, TokenAddress, TokenObservation,
+    CHANNEL_MINT_DEPLOYED, CHANNEL_MINT_DEPLOY_REQUEST, CHANNEL_RECON_SIGNALS,
 };
-use tracing::{info, warn};
+use tracing::{info, warn, error};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MintConfig {
@@ -162,5 +163,127 @@ impl MintService {
 
         info!(clone_address = %address, "clone deployed");
         Ok(TokenAddress(address))
+    }
+
+    /// Subscribe to deploy requests and recon signals.
+    /// Deploy requests trigger clone creation; high-signal recon events
+    /// also trigger auto-deploy when signal_score >= 90.
+    pub async fn start(&mut self) -> Result<()> {
+        info!(
+            chain = ?self.config.chain,
+            network = ?self.config.network,
+            max_per_day = self.config.max_clone_per_day,
+            "MINT service starting subscriber loop"
+        );
+
+        let mut pubsub = self.redis.pubsub().await?;
+
+        pubsub
+            .subscribe(CHANNEL_MINT_DEPLOY_REQUEST)
+            .await
+            .context("failed to subscribe to deploy requests")?;
+        pubsub
+            .subscribe(CHANNEL_RECON_SIGNALS)
+            .await
+            .context("failed to subscribe to recon signals")?;
+
+        use futures_util::StreamExt;
+        let mut stream = pubsub.on_message();
+
+        while let Some(msg) = stream.next().await {
+            let channel: String = msg.get_channel()?;
+            let data: String = msg.get_payload()?;
+
+            let envelope: serde_json::Value = match serde_json::from_str(&data) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!("Failed to parse message: {}", e);
+                    continue;
+                }
+            };
+
+            if channel == CHANNEL_RECON_SIGNALS {
+                // Auto-deploy on high-signal recon events
+                let event_type = envelope.get("event_type").and_then(|v| v.as_str()).unwrap_or("");
+                if event_type != "signal_detected" {
+                    continue;
+                }
+                let payload = match envelope.get("payload") {
+                    Some(p) => p,
+                    None => continue,
+                };
+                let signal_score = payload
+                    .get("signal_score")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                if signal_score < 90 {
+                    continue;
+                }
+
+                let obs: TokenObservation = match serde_json::from_value(payload.clone()) {
+                    Ok(o) => o,
+                    Err(e) => {
+                        warn!("Failed to deserialize TokenObservation: {}", e);
+                        continue;
+                    }
+                };
+
+                info!(
+                    symbol = %obs.symbol,
+                    score = signal_score,
+                    "High-signal recon event triggers auto-deploy"
+                );
+
+                let spec = CloneSpec {
+                    original_token: obs,
+                    strategy: CloneStrategy::Suffix,
+                    chain: self.config.chain,
+                    network: self.config.network,
+                };
+
+                match self.deploy_clone(spec).await {
+                    Ok(addr) => info!(address = %addr.0, "Auto-deployed clone"),
+                    Err(e) => error!("Auto-deploy failed: {}", e),
+                }
+            } else if channel == CHANNEL_MINT_DEPLOY_REQUEST {
+                // Explicit deploy request
+                let payload = match envelope.get("payload").or_else(|| envelope.get("obs")) {
+                    Some(p) => p,
+                    None => continue,
+                };
+                let obs: TokenObservation = match serde_json::from_value(payload.clone()) {
+                    Ok(o) => o,
+                    Err(e) => {
+                        warn!("Failed to deserialize deploy request: {}", e);
+                        continue;
+                    }
+                };
+
+                let strategy_str = envelope
+                    .get("strategy")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("suffix");
+                let strategy = match strategy_str {
+                    "homophone" => CloneStrategy::Homophone,
+                    "unicode" => CloneStrategy::Unicode,
+                    "substitution" => CloneStrategy::Substitution,
+                    _ => CloneStrategy::Suffix,
+                };
+
+                let spec = CloneSpec {
+                    original_token: obs,
+                    strategy,
+                    chain: self.config.chain,
+                    network: self.config.network,
+                };
+
+                match self.deploy_clone(spec).await {
+                    Ok(addr) => info!(address = %addr.0, "Deployed clone from request"),
+                    Err(e) => error!("Deploy request failed: {}", e),
+                }
+            }
+        }
+
+        Ok(())
     }
 }

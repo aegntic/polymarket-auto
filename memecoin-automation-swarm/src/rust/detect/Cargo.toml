@@ -8,3 +8,8 @@ shared = { path = "../shared" }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+redis = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+futures-util = "0.3"
