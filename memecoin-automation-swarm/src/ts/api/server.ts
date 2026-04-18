@@ -6,28 +6,22 @@ import * as fs from "fs";
 import * as path from "path";
 import * as redis from "../shared/redis";
 import * as ch from "../shared/clickhouse";
-import { MasError, ERROR_CODES } from "../shared/types";
+import { MasError, ERROR_CODES, CHANNELS } from "../shared/types";
 import type {
-  Classification,
-  ClassificationResult,
   TokenObservation,
 } from "../shared/types";
 import { OracleClassifier } from "../oracle/classifier";
 import {
   Connection,
   Keypair,
-  PublicKey,
   Transaction,
   SystemProgram,
-  LAMPORTS_PER_SOL,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
-  createAssociatedTokenAccountInstruction,
   createInitializeMintInstruction,
   createMintToInstruction,
-  getAssociatedTokenAddress,
   getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
 import {
@@ -38,11 +32,7 @@ import {
 import {
   ConsensusGateway,
   type SpendProposal,
-  BudgetValidator,
-  SecurityValidator,
-  StrategyValidator,
 } from "../risk/consensus";
-import { ViralSwarm } from "../viral/swarm";
 
 const app = new Hono();
 
@@ -218,15 +208,6 @@ app.post("/deploy", async (c) => {
       payer.publicKey,
     );
 
-    const tx1 = new Transaction().add(
-      createAssociatedTokenAccountInstruction(
-        payer.publicKey,
-        payerTokenAccount.address,
-        payer.publicKey,
-        mintKeypair.publicKey,
-      ),
-    );
-
     // Fund the wallet if needed (optional - can be pre-funded)
     // const airdropSig = await connection.requestAirdrop(payer.publicKey, 0.1 * LAMPORTS_PER_SOL);
     // await connection.confirmTransaction(airdropSig);
@@ -263,9 +244,8 @@ app.post("/deploy", async (c) => {
       ),
     );
 
-    // Mint tokens to payer's associated token account
     // Send transactions
-    const createSig = await sendAndConfirmTransaction(
+    await sendAndConfirmTransaction(
       connection,
       createMintTx,
       [payer, mintKeypair],
@@ -273,6 +253,21 @@ app.post("/deploy", async (c) => {
     const mintSig = await sendAndConfirmTransaction(connection, mintTx, [
       payer,
     ]);
+
+    // Notify the Rust pipeline that a deployment occurred
+    await redis.publishEvent(CHANNELS.MINT_DEPLOYED, {
+      timestamp: new Date().toISOString(),
+      module: "api",
+      event_type: "clone_deployed",
+      payload: {
+        clone_address: mintKeypair.publicKey.toString(),
+        tokenName: name,
+        symbol,
+        strategy: "substitution",
+        chain: "solana",
+        txHash: mintSig,
+      },
+    });
 
     return c.json({
       success: true,
@@ -290,12 +285,12 @@ app.post("/deploy", async (c) => {
         costUSD: 0.0005,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Deployment error:", err);
     let message = "Deployment failed";
     let fix = "Check wallet funding and RPC connectivity";
 
-    if (err.message && err.message.includes("insufficient funds")) {
+    if (err instanceof Error && err.message.includes("insufficient funds")) {
       message = `Insufficient funds in deployer wallet (${deployerKeypair?.publicKey.toString()})`;
       fix = "Please fund the deployer wallet with SOL";
     }
@@ -444,7 +439,7 @@ app.get("/classifications", async (c) => {
        LIMIT ${limit}`,
     );
 
-    const data = rows.map((r, i) => ({
+    const data = rows.map((r) => ({
       address: r.token_address,
       chain: r.chain,
       isClone: r.classification === "clone",

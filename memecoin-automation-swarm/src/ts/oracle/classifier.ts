@@ -4,7 +4,7 @@ import type {
   ClassificationResult,
   Classification,
 } from "../shared/types";
-import { getRedis, incrFloat, getCounter } from "../shared/redis";
+import { incrFloat, getCounter } from "../shared/redis";
 
 const NIM_BASE_URL = "https://integrate.api.nvidia.com/v1";
 

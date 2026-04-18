@@ -28,7 +28,7 @@ export interface ValidationResult {
 
 export abstract class AuthenticityValidator {
   abstract name: string;
-  abstract evaluate(proposal: SpendProposal, gateway?: any): Promise<boolean>;
+  abstract evaluate(_proposal: SpendProposal, _gateway?: ConsensusGateway): Promise<boolean>;
 }
 
 export class BudgetValidator extends AuthenticityValidator {

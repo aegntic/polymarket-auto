@@ -1,5 +1,5 @@
 import Redis from "ioredis";
-import { createEnvelope, EventEnvelope, CHANNELS } from "./types";
+import { EventEnvelope } from "./types";
 
 let redis: Redis | null = null;
 
@@ -21,7 +21,7 @@ export async function publishEvent(
 
 export function subscribeToChannel(
   channel: string,
-  handler: (envelope: EventEnvelope) => void | Promise<void>,
+  handler: (_envelope: EventEnvelope) => void | Promise<void>,
 ): void {
   const sub = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
   sub.subscribe(channel);

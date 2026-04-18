@@ -184,7 +184,7 @@ export async function startClassifierSubscriber() {
         obs = envelope.payload as TokenObservation;
         console.log(`[Pipeline] HOT PATH SIGNAL received for ${obs.symbol}`);
 
-        if ((envelope.payload as any).signal_score === 99) {
+        if ((envelope.payload as TokenObservation & { signal_score?: number }).signal_score === 99) {
           console.log(
             `[Pipeline] VAMPIRE SHADOW INTERCEPT TRIGGERED FOR ${obs.symbol}! Executing auto-deploy...`,
           );
@@ -195,7 +195,7 @@ export async function startClassifierSubscriber() {
         }
       } else {
         // From TS
-        const payload = envelope.payload as any;
+        const payload = envelope.payload as { obs: TokenObservation; match: string; similarity: number };
         obs = payload.obs;
         match = payload.match;
         similarity = payload.similarity;

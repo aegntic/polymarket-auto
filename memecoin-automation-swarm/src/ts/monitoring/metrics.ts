@@ -56,12 +56,14 @@ export function inc(
   counters.set(k, (counters.get(k) ?? 0) + value);
 }
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
 export function observe(
   name: string,
   labels: Record<string, string> = {},
   _value: number,
 ): void {
   // Simplified: treat as counter for now
+  /* eslint-enable @typescript-eslint/no-unused-vars */
   inc(name, labels);
 }
 

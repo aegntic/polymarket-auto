@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 export class ViralPoster {
   async postToTwitter(_content: string): Promise<void> {
     throw new Error("Twitter integration not yet implemented");

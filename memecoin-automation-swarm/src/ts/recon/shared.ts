@@ -90,7 +90,8 @@ export async function fetchLatestTokens(chain?: string): Promise<DexPair[]> {
 
   const allPairs: DexPair[] = [];
 
-  for (const c of chains) {
+  // eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
+  for (const _c of chains) {
     for (const q of queries.slice(0, 3)) {
       try {
         const resp = await fetch(`${DEXSCREENER_API}/latest/dex/search?q=${q}`);

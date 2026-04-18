@@ -1,7 +1,6 @@
 import type {
   TokenObservation,
   Classification,
-  ClassificationResult,
 } from "../shared/types";
 
 export function levenshtein(a: string, b: string): number {

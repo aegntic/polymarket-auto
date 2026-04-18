@@ -6,10 +6,12 @@ export class BaseChainClient {
       rpcUrl || process.env.BASE_RPC_URL || "https://sepolia.base.org";
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async deployToken(_name: string, _symbol: string): Promise<string> {
     throw new Error("Base chain token deployment not yet implemented");
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async getTransactions(_address: string): Promise<unknown[]> {
     throw new Error("Base chain transaction query not yet implemented");
   }

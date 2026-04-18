@@ -8,10 +8,12 @@ export class BnbChainClient {
       "https://data-seed-prebsc-1-s1.binance.org:8545";
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async deployToken(_name: string, _symbol: string): Promise<string> {
     throw new Error("BNB chain token deployment not yet implemented");
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async getTransactions(_address: string): Promise<unknown[]> {
     throw new Error("BNB chain transaction query not yet implemented");
   }

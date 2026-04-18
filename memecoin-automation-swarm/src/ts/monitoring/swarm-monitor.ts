@@ -6,14 +6,11 @@ import {
   CHANNELS,
 } from "../shared/types";
 import {
-  getRedis,
   publishEvent,
   subscribeToChannel,
   getCounter,
   incrFloat,
-  atomicIncrement,
 } from "../shared/redis";
-import { ERROR_CODES, MasError } from "../shared/types";
 
 interface AgentConfig {
   agentId: string;
@@ -28,7 +25,7 @@ interface Task {
   priority: "high" | "medium" | "low";
   assignedAgent?: string;
   createdAt: string;
-  data: any;
+  data: unknown;
 }
 
 interface SwarmMonitorOptions {
@@ -56,6 +53,7 @@ export class SwarmMonitor {
     success: boolean;
   }[] = [];
 
+  // eslint-disable-next-line no-unused-vars
   constructor(private options: SwarmMonitorOptions) {
     this.initializeAgents();
   }
@@ -184,25 +182,25 @@ export class SwarmMonitor {
     await this.scheduleTask({
       type: "monitor",
       priority: "high",
-      data: envelope.payload as any,
+      data: envelope.payload,
     });
   }
 
   private async handleDetectionResult(envelope: EventEnvelope): Promise<void> {
-    const result = envelope.payload as any;
+    const result = envelope.payload as { classification?: string; confidence?: number };
     console.log("Detection result:", result);
 
     if (result.classification === "clone") {
       await incrFloat(
         "mas:monitor:profit:potential",
-        (result.confidence as number) || 0.1,
+        result.confidence ?? 0.1,
       );
     }
   }
 
   private async handleRiskAlert(envelope: EventEnvelope): Promise<void> {
     console.log("Risk alert received:", envelope.payload);
-    const alert = envelope.payload as any;
+    const alert = envelope.payload as { level?: string };
     if (alert.level === "red") {
       await this.emergencyShutdown();
     }
@@ -210,7 +208,7 @@ export class SwarmMonitor {
 
   private async processTasks(): Promise<void> {
     const availableAgents = Array.from(this.agents.entries())
-      .filter(([_, agent]) => agent.status === "idle" && agent.error_count < 3)
+      .filter(([, agent]) => agent.status === "idle" && agent.error_count < 3)
       .sort(([, a], [, b]) => a.tasks_completed - b.tasks_completed);
 
     const pendingTasks = Array.from(this.tasks.values()).filter(
