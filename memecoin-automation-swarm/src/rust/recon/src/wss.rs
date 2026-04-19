@@ -261,7 +261,7 @@ pub async fn start_sniper_listener(
 
                                         let now = SystemTime::now()
                                             .duration_since(UNIX_EPOCH)
-                                            .unwrap()
+                                            .unwrap_or_default()
                                             .as_millis()
                                             as u64;
 

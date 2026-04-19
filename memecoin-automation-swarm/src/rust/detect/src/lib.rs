@@ -44,10 +44,10 @@ fn levenshtein(a: &str, b: &str) -> usize {
     let mut a_chars = a.chars();
     for i in 1..=a_len {
         curr[0] = i;
-        let a_ch = a_chars.next().unwrap();
+        let a_ch = a_chars.next().expect("loop bound guarantees char exists");
         let mut b_chars = b.chars();
         for j in 1..=b_len {
-            let b_ch = b_chars.next().unwrap();
+            let b_ch = b_chars.next().expect("loop bound guarantees char exists");
             let cost = if a_ch == b_ch { 0 } else { 1 };
             curr[j] = (prev[j] + 1)       // deletion
                 .min(curr[j - 1] + 1)      // insertion

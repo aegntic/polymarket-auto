@@ -60,6 +60,11 @@ async function main() {
     observed_at: now,
     source: "dexscreener",
     network: "mainnet",
+    volume_1h: obs.volume_1h || 0,
+    initial_market_cap_usd: obs.initial_market_cap_usd || 0,
+    initial_liquidity_sol: obs.initial_liquidity_sol || 0,
+    holder_count_1h: obs.holder_count_1h || 0,
+    signal_score: obs.signal_score || 0,
   }));
 
   try {
@@ -71,8 +76,8 @@ async function main() {
 
   // 4. Update Redis counters
   const r = redis.getRedis();
-  const hourKey = `mas:risk:hourly:${new Date().toISOString().slice(0, 13)}`;
-  const dayKey = `mas:risk:daily:${new Date().toISOString().slice(0, 10)}`;
+  const hourKey = `mas:observations:hourly:${new Date().toISOString().slice(0, 13)}`;
+  const dayKey = `mas:observations:daily:${new Date().toISOString().slice(0, 10)}`;
   await r.incrby(hourKey, observations.length);
   await r.incrby(dayKey, observations.length);
   console.log("Updated Redis counters");

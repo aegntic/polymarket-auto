@@ -8,6 +8,11 @@ export interface RiskStatus {
   observations_hourly: number;
 }
 
+const MAX_CLONES_PER_DAY = parseInt(
+  process.env.MAX_CLONES_PER_DAY || "50",
+  10,
+);
+
 export async function getRiskStatus(): Promise<RiskStatus> {
   const today = new Date().toISOString().slice(0, 10);
   const hour = new Date().toISOString().slice(0, 13);
@@ -19,11 +24,11 @@ export async function getRiskStatus(): Promise<RiskStatus> {
   ]);
 
   let circuitBreaker: CircuitBreakerLevel = "green";
-  if (clonesToday >= 200 * 0.9) {
+  if (clonesToday >= MAX_CLONES_PER_DAY * 0.9) {
     circuitBreaker = "red";
-  } else if (clonesToday >= 200 * 0.7) {
+  } else if (clonesToday >= MAX_CLONES_PER_DAY * 0.7) {
     circuitBreaker = "orange";
-  } else if (clonesToday >= 200 * 0.4) {
+  } else if (clonesToday >= MAX_CLONES_PER_DAY * 0.4) {
     circuitBreaker = "yellow";
   }
 
