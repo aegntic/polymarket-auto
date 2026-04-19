@@ -129,6 +129,11 @@ export async function runReconLoop() {
         observed_at: now,
         source: "dexscreener",
         network: "mainnet",
+        volume_1h: obs.volume_1h || 0,
+        initial_market_cap_usd: obs.initial_market_cap_usd || 0,
+        initial_liquidity_sol: obs.initial_liquidity_sol || 0,
+        holder_count_1h: obs.holder_count_1h || 0,
+        signal_score: obs.signal_score || 0,
       }));
 
       await ch.insertObservations(insertBatch);

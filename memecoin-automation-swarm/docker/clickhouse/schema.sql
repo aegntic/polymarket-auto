@@ -20,6 +20,13 @@ CREATE TABLE IF NOT EXISTS clonet.token_observations
     observed_at     DateTime DEFAULT now(),
     block_slot      UInt64 DEFAULT 0,
 
+    -- Market data (populated from DexScreener/chain RPC)
+    volume_1h              Float64 DEFAULT 0,
+    initial_market_cap_usd Float64 DEFAULT 0,
+    initial_liquidity_sol  Float64 DEFAULT 0,
+    holder_count_1h        UInt32 DEFAULT 0,
+    signal_score           Float32 DEFAULT 0,
+
     -- Source tracking
     source          LowCardinality(String),  -- geyser, helius_das, dexscreener, birdeye
     network         LowCardinality(String),  -- devnet, testnet, mainnet
