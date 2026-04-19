@@ -77,9 +77,21 @@ export class SwarmMonitor {
     this.isRunning = true;
     console.log("Swarm Monitor started with", this.agents.size, "agents");
 
-    setInterval(() => this.monitorHeartbeats(), 5000);
-    setInterval(() => this.collectMetrics(), this.options.metricsIntervalMs);
-    setInterval(() => this.processTasks(), 1000);
+    setInterval(() => {
+      this.monitorHeartbeats().catch((err) =>
+        console.error("[SwarmMonitor] monitorHeartbeats error:", err),
+      );
+    }, 5000);
+    setInterval(() => {
+      this.collectMetrics().catch((err) =>
+        console.error("[SwarmMonitor] collectMetrics error:", err),
+      );
+    }, this.options.metricsIntervalMs);
+    setInterval(() => {
+      this.processTasks().catch((err) =>
+        console.error("[SwarmMonitor] processTasks error:", err),
+      );
+    }, 1000);
 
     this.subscribeToChannels();
   }
@@ -259,16 +271,23 @@ export class SwarmMonitor {
     return taskId;
   }
 
+  private shutdownTriggered = false;
+
   private async emergencyShutdown(): Promise<void> {
+    if (this.shutdownTriggered) return;
+    this.shutdownTriggered = true;
+
     console.log("🚨 EMERGENCY SHUTDOWN TRIGGERED 🚨");
     this.isRunning = false;
 
     await publishEvent(
-      CHANNELS.RISK_ALERTS,
+      CHANNELS.ORACLE_RESULTS,
       createEnvelope("monitor", "emergency_shutdown", {
-        reason: "profitability_target_exceeded",
+        reason: "circuit_breaker_red",
         timestamp: new Date().toISOString(),
       }),
+    ).catch((err) =>
+      console.error("[SwarmMonitor] Failed to publish shutdown event:", err),
     );
   }
 

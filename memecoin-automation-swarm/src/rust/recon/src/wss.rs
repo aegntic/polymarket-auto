@@ -314,3 +314,34 @@ pub async fn start_sniper_listener(
 
     Ok(())
 }
+
+/// Backoff reconnect loop for the WSS sniper.
+/// Resets the backoff on every successful connection so transient blips
+/// don't leave us at a high backoff ceiling.
+pub async fn run_with_backoff(
+    rpc_ws_url: &str,
+    redis_url: &str,
+    rpc_http_url: &str,
+) {
+    let mut backoff_secs = 1u64;
+    const MAX_BACKOFF: u64 = 300;
+
+    loop {
+        info!(
+            "WSS sniper connecting (backoff={}s)...",
+            backoff_secs
+        );
+        match start_sniper_listener(rpc_ws_url, redis_url, rpc_http_url).await {
+            Ok(()) => {
+                // Clean close (e.g. server-initiated). Reset backoff and reconnect.
+                warn!("WSS connection closed cleanly. Reconnecting immediately.");
+                backoff_secs = 1;
+            }
+            Err(e) => {
+                error!("WSS sniper error: {}. Reconnecting in {}s", e, backoff_secs);
+                tokio::time::sleep(std::time::Duration::from_secs(backoff_secs)).await;
+                backoff_secs = (backoff_secs * 2).min(MAX_BACKOFF);
+            }
+        }
+    }
+}

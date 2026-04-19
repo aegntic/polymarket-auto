@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import "dotenv/config";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import * as redis from "../shared/redis";
 import * as ch from "../shared/clickhouse";
 import { MasError, ERROR_CODES, CHANNELS } from "../shared/types";
@@ -46,6 +47,22 @@ const gateway = new ConsensusGateway();
 startPipeline();
 
 // ---------------------------------------------------------------------------
+// Global error handlers (C1)
+// ---------------------------------------------------------------------------
+process.on("unhandledRejection", (reason, promise) => {
+  console.error(
+    "[API] Unhandled Rejection at:",
+    promise,
+    "reason:",
+    reason,
+  );
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[API] Uncaught Exception:", err);
+});
+
+// ---------------------------------------------------------------------------
 // Solana wallet configuration
 // ---------------------------------------------------------------------------
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
@@ -86,7 +103,10 @@ if (!deployerKeypair) {
 
   const secretKeyArray = Array.from(deployerKeypair.secretKey);
   try {
-    fs.writeFileSync(WALLET_FILE, JSON.stringify(secretKeyArray), { mode: 0o600 });
+    // M5: Atomic write via temp file + rename
+    const tmpFile = path.join(os.tmpdir(), `mas-wallet-${Date.now()}.tmp`);
+    fs.writeFileSync(tmpFile, JSON.stringify(secretKeyArray), { mode: 0o600 });
+    fs.renameSync(tmpFile, WALLET_FILE);
     console.log(`\n======================================================`);
     console.log(
       `🎉 NEW WALLET CREATED: ${deployerKeypair.publicKey.toString()}`,
@@ -158,6 +178,7 @@ app.post("/deploy", async (c) => {
     symbol?: string;
     supply?: number;
     decimals?: number;
+    idempotencyKey?: string;
   }>();
 
   const name = body.name || "BaitToken";
@@ -178,11 +199,34 @@ app.post("/deploy", async (c) => {
     );
   }
 
+  // H7: Idempotency guard via Redis SETNX
+  if (body.idempotencyKey) {
+    const r = redis.getRedis();
+    const seen = await r.set(
+      `mas:deploy:idem:${body.idempotencyKey}`,
+      "1",
+      "EX",
+      3600,
+      "NX",
+    );
+    if (!seen) {
+      return c.json(
+        {
+          error: {
+            code: "MAS_E8004",
+            message: "Duplicate deploy request (idempotency key already used)",
+          },
+        },
+        409,
+      );
+    }
+  }
+
   // Consensus Check
   const proposal: SpendProposal = {
     id: `prop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     proposer: "mint-module",
-    amount_sol: 0.02, // Estimate for minting/deployment
+    amount_sol: 0.02,
     estimated_cost_sol: 0.02,
     reason: `Vampire intercept clone of ${symbol}`,
     timestamp: Date.now(),
@@ -215,16 +259,12 @@ app.post("/deploy", async (c) => {
       payer.publicKey,
     );
 
-    // Fund the wallet if needed (optional - can be pre-funded)
-    // const airdropSig = await connection.requestAirdrop(payer.publicKey, 0.1 * LAMPORTS_PER_SOL);
-    // await connection.confirmTransaction(airdropSig);
-
     // Create the mint
     const createMintTx = new Transaction().add(
       SystemProgram.createAccount({
         fromPubkey: payer.publicKey,
         newAccountPubkey: mintKeypair.publicKey,
-        space: 82, // Mint account size
+        space: 82,
         lamports: await connection.getMinimumBalanceForRentExemption(82),
         programId: TOKEN_PROGRAM_ID,
       }),
@@ -237,9 +277,20 @@ app.post("/deploy", async (c) => {
       ),
     );
 
-    // Mint tokens to payer's associated token account
-    // Use BigInt to avoid Number precision loss at high decimals
+    // H7: Overflow guard for mintAmount
     const mintAmount = BigInt(supply) * BigInt(10 ** decimals);
+    if (mintAmount < 0n) {
+      return c.json(
+        {
+          error: {
+            code: "MAS_E8005",
+            message: "Mint amount overflow: supply * 10^decimals exceeds safe range",
+          },
+        },
+        400,
+      );
+    }
+
     const mintTx = new Transaction().add(
       createMintToInstruction(
         mintKeypair.publicKey,
@@ -263,6 +314,14 @@ app.post("/deploy", async (c) => {
 
     // Notify the Rust pipeline that a deployment occurred
     metrics.inc("mas_clone_deployments_total", { chain: "solana", strategy: "substitution" });
+
+    // Track actual clone deployments for circuit breaker
+    const r = redis.getRedis();
+    const hour = new Date().toISOString().slice(0, 13);
+    const today = new Date().toISOString().slice(0, 10);
+    await r.incrby(`mas:clones:hourly:${hour}`, 1);
+    await r.incrby(`mas:clones:daily:${today}`, 1);
+
     await redis.publishEvent(CHANNELS.MINT_DEPLOYED, {
       timestamp: new Date().toISOString(),
       module: "api",
@@ -391,37 +450,63 @@ app.get("/signals", async (c) => {
 // ---------------------------------------------------------------------------
 app.get("/circuit-breaker", async (c) => {
   const now = new Date();
-  const hourKey = `mas:risk:hourly:${now.toISOString().slice(0, 13)}`;
-  const dayKey = `mas:risk:daily:${now.toISOString().slice(0, 10)}`;
-  const budgetKey = "mas:economy:llm_cost_today";
+  const hour = now.toISOString().slice(0, 13);
+  const today = now.toISOString().slice(0, 10);
 
-  const [hourly, daily, llmCost] = await Promise.all([
-    redis.getCounter(hourKey).catch(() => 0),
-    redis.getCounter(dayKey).catch(() => 0),
-    redis.getCounter(budgetKey).catch(() => 0),
+  // Three separate tracks:
+  // 1. Observations ingested (uncapped, informational)
+  // 2. Clone deployments (hard cap per day)
+  // 3. LLM cost (budget cap)
+  const [
+    obsHourly, obsDaily,
+    clonesHourly, clonesDaily,
+    llmCost,
+  ] = await Promise.all([
+    redis.getCounter(`mas:observations:hourly:${hour}`).catch(() => 0),
+    redis.getCounter(`mas:observations:daily:${today}`).catch(() => 0),
+    redis.getCounter(`mas:clones:hourly:${hour}`).catch(() => 0),
+    redis.getCounter(`mas:clones:daily:${today}`).catch(() => 0),
+    redis.getCounter(`mas:economy:llm_cost:${today}`).catch(() => 0),
   ]);
 
-  const maxPerHour = 40;
-  const maxPerDay = 200;
-  const budgetPerDay = 10;
+  const maxClonesPerHour = 30;
+  const maxClonesPerDay = 200;
+  const llmBudgetPerDay = 10;
 
   let level = "green";
-  if (hourly >= maxPerHour * 0.9 || daily >= maxPerDay * 0.9) level = "red";
-  else if (hourly >= maxPerHour * 0.7 || daily >= maxPerDay * 0.7)
+  if (clonesDaily >= maxClonesPerDay * 0.9 || parseFloat(String(llmCost)) >= llmBudgetPerDay * 0.9) {
+    level = "red";
+  } else if (clonesHourly >= maxClonesPerHour * 0.7 || clonesDaily >= maxClonesPerDay * 0.7) {
     level = "orange";
-  else if (hourly >= maxPerHour * 0.4 || daily >= maxPerDay * 0.4)
+  } else if (clonesHourly >= maxClonesPerHour * 0.4 || clonesDaily >= maxClonesPerDay * 0.4) {
     level = "yellow";
+  }
 
   return c.json({
     success: true,
     data: {
       level,
-      clonesLastHour: hourly,
-      maxPerHour,
-      clonesToday: daily,
-      maxPerDay,
+      observations: {
+        lastHour: obsHourly,
+        today: obsDaily,
+      },
+      clones: {
+        lastHour: clonesHourly,
+        maxPerHour: maxClonesPerHour,
+        today: clonesDaily,
+        maxPerDay: maxClonesPerDay,
+      },
+      llm: {
+        costToday: parseFloat(String(llmCost)) || 0,
+        budgetPerDay: llmBudgetPerDay,
+      },
+      // Backward compat for frontend
+      clonesLastHour: clonesHourly,
+      maxPerHour: maxClonesPerHour,
+      clonesToday: clonesDaily,
+      maxPerDay: maxClonesPerDay,
       llmCostToday: parseFloat(String(llmCost)) || 0,
-      llmBudgetPerDay: budgetPerDay,
+      llmBudgetPerDay: llmBudgetPerDay,
     },
   });
 });
@@ -565,14 +650,14 @@ app.post("/classify", async (c) => {
     );
   }
 
-  const hourlyKey = `mas:risk:hourly:${new Date().toISOString().slice(0, 13)}`;
-  const hourlyCount = await redis.getCounter(hourlyKey);
-  if (hourlyCount >= 40) {
+  const hourlyKey = `mas:clones:hourly:${new Date().toISOString().slice(0, 13)}`;
+  const hourlyClones = await redis.getCounter(hourlyKey);
+  if (hourlyClones >= 30) {
     return c.json(
       {
         error: {
           code: ERROR_CODES.CB_ORANGE,
-          message: "Circuit breaker: rate limit exceeded",
+          message: "Circuit breaker: clone rate limit exceeded (30/hour)",
         },
       },
       429,
@@ -713,8 +798,19 @@ app.onError((err, c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Start
+// Start with graceful shutdown
 // ---------------------------------------------------------------------------
 const port = parseInt(process.env.PORT || "8080", 10);
 console.log(`MAS API starting on port ${port}`);
-serve({ fetch: app.fetch, port });
+const server = serve({ fetch: app.fetch, port });
+
+function gracefulShutdown(signal: string) {
+  console.log(`[API] Received ${signal}, shutting down gracefully...`);
+  stopPipeline();
+  server.close();
+  redis.closeAllSubscriptions();
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

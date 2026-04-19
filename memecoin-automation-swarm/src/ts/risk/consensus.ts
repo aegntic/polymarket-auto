@@ -94,6 +94,8 @@ export class ConsensusGateway {
       await redisClient.publish(
         CHANNELS.ECONOMY_SETTLED,
         JSON.stringify({ event: "consensus_reached", proposalId: proposal.id }),
+      ).catch((err: unknown) =>
+        console.error("[ConsensusGateway] Failed to publish consensus_reached:", err),
       );
     } else {
       console.log(
@@ -105,6 +107,8 @@ export class ConsensusGateway {
           event: "consensus_rejected",
           proposalId: proposal.id,
         }),
+      ).catch((err: unknown) =>
+        console.error("[ConsensusGateway] Failed to publish consensus_rejected:", err),
       );
     }
     return consensusReached;

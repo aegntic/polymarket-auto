@@ -2,6 +2,9 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { getRedis } from "../shared/redis";
 import * as ch from "../shared/clickhouse";
 
+// H4: Singleton connection for AlphaDiscoveryEngine
+let alphaConnection: Connection | null = null;
+
 export class AlphaDiscoveryEngine {
   private redis = getRedis();
   private rpcUrl: string;
@@ -10,6 +13,13 @@ export class AlphaDiscoveryEngine {
     this.rpcUrl = process.env.HELIUS_API_KEY
       ? `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`
       : "https://api.mainnet-beta.solana.com";
+  }
+
+  private getConnection(): Connection {
+    if (!alphaConnection) {
+      alphaConnection = new Connection(this.rpcUrl, "confirmed");
+    }
+    return alphaConnection;
   }
 
   /**
@@ -82,7 +92,7 @@ export class AlphaDiscoveryEngine {
   private async getEarlyBuyers(mintAddress: string): Promise<string[]> {
     const buyers = new Set<string>();
     try {
-      const connection = new Connection(this.rpcUrl, "confirmed");
+      const connection = this.getConnection();
       const pubkey = new PublicKey(mintAddress);
 
       // Get the earliest signatures (oldest first)

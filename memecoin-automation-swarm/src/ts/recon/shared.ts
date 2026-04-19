@@ -84,6 +84,23 @@ export function mapChain(chainId: string): Chain | null {
   return null; // unsupported chain
 }
 
+// H2: Fetch with retry and backoff for rate-limited APIs
+async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const resp = await fetch(url);
+    if (resp.status === 429 || resp.status >= 500) {
+      const delay = 1000 * Math.pow(2, attempt);
+      console.warn(
+        `[DexScreener] Rate limited (${resp.status}), retrying in ${delay}ms (attempt ${attempt + 1}/${retries})`,
+      );
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+    return resp;
+  }
+  throw new Error(`DexScreener API failed after ${retries} retries for ${url}`);
+}
+
 export async function fetchLatestTokens(chain?: string): Promise<DexPair[]> {
   const chains = chain ? [chain] : ["solana", "base"];
   const queries = ["pump", "inu", "pepe", "cat", "dog", "frog", "bonk", "hat"];
@@ -94,14 +111,14 @@ export async function fetchLatestTokens(chain?: string): Promise<DexPair[]> {
   for (const _c of chains) {
     for (const q of queries.slice(0, 3)) {
       try {
-        const resp = await fetch(`${DEXSCREENER_API}/latest/dex/search?q=${q}`);
+        const resp = await fetchWithRetry(`${DEXSCREENER_API}/latest/dex/search?q=${q}`);
         const data = (await resp.json()) as { pairs: DexPair[] };
         const filtered = (data.pairs || []).filter((p) =>
           chains.includes(p.chainId),
         );
         allPairs.push(...filtered);
-      } catch {
-        // skip
+      } catch (err) {
+        console.warn(`[DexScreener] Failed to fetch query "${q}":`, err instanceof Error ? err.message : err);
       }
     }
   }
@@ -119,10 +136,11 @@ export async function fetchTokenProfiles(
   chain: string,
 ): Promise<DexTokenProfile[]> {
   try {
-    const resp = await fetch(`${DEXSCREENER_API}/token-profiles/latest/v1`);
+    const resp = await fetchWithRetry(`${DEXSCREENER_API}/token-profiles/latest/v1`);
     const data = (await resp.json()) as DexTokenProfile[];
     return data.filter((t) => !chain || t.chainId === chain);
-  } catch {
+  } catch (err) {
+    console.warn("[DexScreener] Failed to fetch token profiles:", err instanceof Error ? err.message : err);
     return [];
   }
 }

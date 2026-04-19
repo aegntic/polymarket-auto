@@ -15,6 +15,9 @@ let isRunning = false;
 let timeoutId: NodeJS.Timeout | null | number = null;
 let alphaCronId: NodeJS.Timeout | null | number = null;
 let classificationsInProgress = 0;
+let reconConsecutiveFailures = 0;
+let alphaConsecutiveFailures = 0;
+const MAX_CONSECUTIVE_FAILURES = 10;
 
 export async function triggerAutoDeploy(
   obs: TokenObservation,
@@ -73,8 +76,15 @@ export async function runAlphaDiscoveryLoop() {
 
   try {
     await alphaEngine.runDiscoveryCycle();
+    alphaConsecutiveFailures = 0;
   } catch (err) {
+    alphaConsecutiveFailures++;
     console.error("[Pipeline] AlphaGraph error:", err);
+    if (alphaConsecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      console.error(
+        `[Pipeline] ALERT: AlphaGraph has failed ${alphaConsecutiveFailures} times consecutively. Entering degraded mode.`,
+      );
+    }
   }
 
   // Schedule next discovery run (every 10 minutes)
@@ -125,10 +135,13 @@ export async function runReconLoop() {
       console.log(`[Pipeline] Inserted ${insertBatch.length} observations`);
 
       const r = redis.getRedis();
-      const hourKey = `mas:risk:hourly:${new Date().toISOString().slice(0, 13)}`;
-      const dayKey = `mas:risk:daily:${new Date().toISOString().slice(0, 10)}`;
-      await r.incrby(hourKey, observations.length);
-      await r.incrby(dayKey, observations.length);
+      // Track observations ingested (uncapped -- just data)
+      const obsHourKey = `mas:observations:hourly:${new Date().toISOString().slice(0, 13)}`;
+      const obsDayKey = `mas:observations:daily:${new Date().toISOString().slice(0, 10)}`;
+      await r.incrby(obsHourKey, observations.length);
+      await r.incrby(obsDayKey, observations.length);
+      await r.expire(obsHourKey, 7200);
+      await r.expire(obsDayKey, 172800);
 
       // Trigger classify for suspicious ones via Redis
       const toClassify = screened
@@ -149,8 +162,15 @@ export async function runReconLoop() {
         });
       }
     }
+    reconConsecutiveFailures = 0;
   } catch (err) {
+    reconConsecutiveFailures++;
     console.error("[Pipeline] RECON error:", err);
+    if (reconConsecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      console.error(
+        `[Pipeline] ALERT: RECON has failed ${reconConsecutiveFailures} times consecutively. Entering degraded mode.`,
+      );
+    }
   }
 
   // Schedule next run
@@ -166,87 +186,97 @@ export async function startClassifierSubscriber() {
   const narrativeEngine = new NarrativeEngine();
 
   // Listen to both the TS polling recon and the Rust fast-path sniper
-  redis.subscribeToChannel(CHANNELS.RECON_SIGNALS, async (envelope: EventEnvelope) => {
-    // Rust fast-path sends "signal_detected", TS polling sends "token_detected"
-    if (
-      envelope.event_type !== "token_detected" &&
-      envelope.event_type !== "signal_detected"
-    )
-      return;
+  redis.subscribeToChannel(
+    CHANNELS.RECON_SIGNALS,
+    async (envelope: EventEnvelope) => {
+      // Rust fast-path sends "signal_detected", TS polling sends "token_detected"
+      if (
+        envelope.event_type !== "token_detected" &&
+        envelope.event_type !== "signal_detected"
+      )
+        return;
 
-    try {
-      let obs: TokenObservation;
-      let match = "";
-      let similarity = 0;
-
-      if (envelope.event_type === "signal_detected") {
-        // From Rust
-        obs = envelope.payload as TokenObservation;
-        console.log(`[Pipeline] HOT PATH SIGNAL received for ${obs.symbol}`);
-
-        if ((envelope.payload as TokenObservation & { signal_score?: number }).signal_score === 99) {
-          console.log(
-            `[Pipeline] VAMPIRE SHADOW INTERCEPT TRIGGERED FOR ${obs.symbol}! Executing auto-deploy...`,
-          );
-          const cloneMintAddress = await triggerAutoDeploy(obs);
-          if (cloneMintAddress) {
-            await triggerViralSwarm(obs, cloneMintAddress);
-          }
-        }
-      } else {
-        // From TS
-        const payload = envelope.payload as { obs: TokenObservation; match: string; similarity: number };
-        obs = payload.obs;
-        match = payload.match;
-        similarity = payload.similarity;
-      }
-
-      classificationsInProgress++;
       try {
-        // Calculate Narrative Distance
-        const narrativeScore = await narrativeEngine.calculateNarrativeDistance(
-          obs.name,
-          obs.symbol,
-        );
+        let obs: TokenObservation;
+        let match = "";
+        let similarity = 0;
 
-        let narrativeReasoning = "";
-        if (narrativeScore.match) {
-          narrativeReasoning = ` Narrative Distance: ${narrativeScore.distance.toFixed(1)} (Matched: "${narrativeScore.match.content.substring(0, 30)}...")`;
+        if (envelope.event_type === "signal_detected") {
+          // From Rust
+          obs = envelope.payload as TokenObservation;
+          console.log(`[Pipeline] HOT PATH SIGNAL received for ${obs.symbol}`);
+
+          if (
+            (envelope.payload as TokenObservation & { signal_score?: number })
+              .signal_score === 99
+          ) {
+            console.log(
+              `[Pipeline] VAMPIRE SHADOW INTERCEPT TRIGGERED FOR ${obs.symbol}! Executing auto-deploy...`,
+            );
+            const cloneMintAddress = await triggerAutoDeploy(obs);
+            if (cloneMintAddress) {
+              await triggerViralSwarm(obs, cloneMintAddress);
+            }
+          }
         } else {
-          narrativeReasoning = " Narrative Distance: 100 (No match)";
+          // From TS
+          const payload = envelope.payload as {
+            obs: TokenObservation;
+            match: string;
+            similarity: number;
+          };
+          obs = payload.obs;
+          match = payload.match;
+          similarity = payload.similarity;
         }
 
-        console.log(`[Pipeline] ${obs.symbol} ${narrativeReasoning}`);
+        classificationsInProgress++;
+        try {
+          // Calculate Narrative Distance
+          const narrativeScore =
+            await narrativeEngine.calculateNarrativeDistance(
+              obs.name,
+              obs.symbol,
+            );
 
-        const result = await oracle.classify(obs);
-        console.log(
-          `[Pipeline] Classified ${obs.symbol}: ${result.classification} @ ${result.confidence.toFixed(2)}`,
-        );
+          let narrativeReasoning = "";
+          if (narrativeScore.match) {
+            narrativeReasoning = ` Narrative Distance: ${narrativeScore.distance.toFixed(1)} (Matched: "${narrativeScore.match.content.substring(0, 30)}...")`;
+          } else {
+            narrativeReasoning = " Narrative Distance: 100 (No match)";
+          }
 
-        await ch.insertClassifications([
-          {
-            token_address: result.token_address,
-            chain: result.chain,
-            classification: result.classification,
-            confidence: result.confidence,
-            original_token: match || "",
-            reasoning:
-              result.reasoning +
-              ` | Rule-based similarity: ${similarity.toFixed(3)} to "${match}" | ${narrativeReasoning}`,
-            classified_at: new Date()
-              .toISOString()
-              .replace("T", " ")
-              .slice(0, 19),
-          },
-        ]);
-      } finally {
-        classificationsInProgress--;
+          console.log(`[Pipeline] ${obs.symbol} ${narrativeReasoning}`);
+
+          const result = await oracle.classify(obs);
+          console.log(
+            `[Pipeline] Classified ${obs.symbol}: ${result.classification} @ ${result.confidence.toFixed(2)}`,
+          );
+
+          await ch.insertClassifications([
+            {
+              token_address: result.token_address,
+              chain: result.chain,
+              classification: result.classification,
+              confidence: result.confidence,
+              original_token: match || "",
+              reasoning:
+                result.reasoning +
+                ` | Rule-based similarity: ${similarity.toFixed(3)} to "${match}" | ${narrativeReasoning}`,
+              classified_at: new Date()
+                .toISOString()
+                .replace("T", " ")
+                .slice(0, 19),
+            },
+          ]);
+        } finally {
+          classificationsInProgress--;
+        }
+      } catch (err) {
+        console.error("[Pipeline] Classification error:", err);
       }
-    } catch (err) {
-      console.error("[Pipeline] Classification error:", err);
-      classificationsInProgress--;
-    }
-  });
+    },
+  );
   console.log("[Pipeline] Subscribed to recon:signals");
 }
 

@@ -15,9 +15,9 @@ pub struct RiskConfig {
 impl Default for RiskConfig {
     fn default() -> Self {
         Self {
-            max_clone_per_day: 50,
-            yellow_threshold_per_hour: 30,
-            orange_threshold_per_hour: 40,
+            max_clone_per_day: 200,
+            yellow_threshold_per_hour: 12,
+            orange_threshold_per_hour: 25,
             llm_budget_usd_per_day: 10.0,
         }
     }
@@ -73,11 +73,11 @@ impl RiskService {
     }
 
     pub async fn evaluate_circuit_breaker(&mut self) -> Result<CircuitBreakerLevel> {
-        let key = format!(
-            "mas:risk:hourly:{}",
+        let hour_key = format!(
+            "mas:clones:hourly:{}",
             chrono::Utc::now().format("%Y-%m-%d-%H")
         );
-        let current: Option<String> = self.redis.get(&key).await?;
+        let current: Option<String> = self.redis.get(&hour_key).await?;
         let count: u64 = current.and_then(|v| v.parse().ok()).unwrap_or(0);
 
         let level = if count >= self.config.orange_threshold_per_hour as u64 {
@@ -113,8 +113,13 @@ impl RiskService {
             "RISK service starting periodic circuit breaker evaluation"
         );
 
-        // Also subscribe to recon signals to track hourly volume
+        // Subscribe to clone deployment events for rate tracking
+        // and recon signals for observation volume (informational)
         let mut pubsub = self.redis.pubsub().await?;
+        pubsub
+            .subscribe(shared::CHANNEL_MINT_DEPLOYED)
+            .await
+            .context("failed to subscribe to mint deployed channel")?;
         pubsub
             .subscribe(shared::CHANNEL_RECON_SIGNALS)
             .await
@@ -126,13 +131,32 @@ impl RiskService {
 
         loop {
             tokio::select! {
-                Some(_msg) = stream.next() => {
-                    // Count each recon signal toward hourly rate
-                    let hour_key = format!(
-                        "mas:risk:hourly:{}",
-                        chrono::Utc::now().format("%Y-%m-%d-%H")
-                    );
-                    let _ = self.redis.incr(&hour_key).await;
+                Some(msg) = stream.next() => {
+                    let channel: Option<String> = msg.get_channel().ok();
+                    match channel.as_deref() {
+                        // Actual clone deployments -> count toward circuit breaker
+                        Some(ch) if ch == shared::CHANNEL_MINT_DEPLOYED => {
+                            let hour_key = format!(
+                                "mas:clones:hourly:{}",
+                                chrono::Utc::now().format("%Y-%m-%d-%H")
+                            );
+                            let day_key = format!(
+                                "mas:clones:daily:{}",
+                                chrono::Utc::now().format("%Y-%m-%d")
+                            );
+                            let _ = self.redis.incr(&hour_key).await;
+                            let _ = self.redis.incr(&day_key).await;
+                        }
+                        // Recon signals -> observation volume (informational only)
+                        Some(ch) if ch == shared::CHANNEL_RECON_SIGNALS => {
+                            let hour_key = format!(
+                                "mas:observations:hourly:{}",
+                                chrono::Utc::now().format("%Y-%m-%d-%H")
+                            );
+                            let _ = self.redis.incr(&hour_key).await;
+                        }
+                        _ => {}
+                    }
                 }
                 _ = eval_interval.tick() => {
                     match self.evaluate_circuit_breaker().await {

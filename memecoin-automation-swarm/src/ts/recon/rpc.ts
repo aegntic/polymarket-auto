@@ -1,6 +1,24 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import { ethers } from "ethers";
 
+// H4: Singleton connection pool for RPC providers
+const solanaConnections = new Map<string, Connection>();
+const evmProviders = new Map<string, ethers.JsonRpcProvider>();
+
+function getSolanaConnection(rpcUrl: string): Connection {
+  if (!solanaConnections.has(rpcUrl)) {
+    solanaConnections.set(rpcUrl, new Connection(rpcUrl, "confirmed"));
+  }
+  return solanaConnections.get(rpcUrl)!;
+}
+
+function getEvmProvider(rpcUrl: string): ethers.JsonRpcProvider {
+  if (!evmProviders.has(rpcUrl)) {
+    evmProviders.set(rpcUrl, new ethers.JsonRpcProvider(rpcUrl));
+  }
+  return evmProviders.get(rpcUrl)!;
+}
+
 // ERC20 minimal ABI for getting supply, decimals, and creator (via first tx if possible, or just default)
 const ERC20_ABI = [
   "function totalSupply() view returns (uint256)",
@@ -12,7 +30,7 @@ export async function fetchSolanaTokenInfo(
   rpcUrl: string = "https://api.mainnet-beta.solana.com",
 ) {
   try {
-    const connection = new Connection(rpcUrl, "confirmed");
+    const connection = getSolanaConnection(rpcUrl);
     const pubkey = new PublicKey(address);
 
     // Get token supply & decimals
@@ -25,7 +43,6 @@ export async function fetchSolanaTokenInfo(
         limit: 1000,
       });
       if (sigs.length > 0) {
-        // The last signature in the array is the oldest one we fetched
         const oldestSig = sigs[sigs.length - 1].signature;
         const tx = await connection.getParsedTransaction(oldestSig, {
           maxSupportedTransactionVersion: 0,
@@ -33,7 +50,6 @@ export async function fetchSolanaTokenInfo(
         if (tx && tx.transaction.message.accountKeys.length > 0) {
           const keys = tx.transaction.message.accountKeys;
           if (keys.length > 0) {
-            // The fee payer is typically the creator/deployer
             creator_address = keys[0]?.pubkey.toString() || "";
           }
         }
@@ -62,7 +78,7 @@ export async function fetchSolanaTokenInfo(
 
 export async function fetchEvmTokenInfo(address: string, rpcUrl: string) {
   try {
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const provider = getEvmProvider(rpcUrl);
     const contract = new ethers.Contract(address, ERC20_ABI, provider);
 
     const [supply, decimals] = await Promise.all([
@@ -70,11 +86,7 @@ export async function fetchEvmTokenInfo(address: string, rpcUrl: string) {
       contract.decimals().catch(() => 18n),
     ]);
 
-    // Formatting supply using decimals
     const formattedSupply = ethers.formatUnits(supply, Number(decimals));
-
-    // Creator address on EVM is harder to get via standard RPC without a block explorer API or indexing the creation block.
-    // For now, we leave it empty, but returning supply and decimals is a big improvement.
 
     return {
       supply: formattedSupply.toString(),

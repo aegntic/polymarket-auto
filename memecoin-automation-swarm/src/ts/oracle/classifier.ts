@@ -86,8 +86,12 @@ export class OracleClassifier {
           classified_at: new Date().toISOString(),
           cost_usd: 0,
         };
-      } catch {
+      } catch (err) {
         // Model unavailable, try next in chain
+        console.warn(
+          `[Oracle] Model '${model}' failed, trying next in chain:`,
+          err instanceof Error ? err.message : err,
+        );
         continue;
       }
     }
@@ -120,7 +124,9 @@ export class OracleClassifier {
       if (jsonMatch) {
         return JSON.parse(jsonMatch[0]) as LLMClassification;
       }
-      throw new Error(`Failed to parse LLM response: ${content.slice(0, 100)}`);
+      throw new Error(
+        `Failed to parse LLM response from model: ${content.slice(0, 200)}`,
+      );
     }
   }
 

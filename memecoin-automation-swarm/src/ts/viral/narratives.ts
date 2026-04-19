@@ -64,7 +64,15 @@ export class NarrativeEngine {
    */
   async getActiveNarratives(): Promise<NarrativeEvent[]> {
     const raw = await this.redis.zrevrange(this.WINDOW_KEY, 0, 50);
-    return raw.map((r) => JSON.parse(r) as NarrativeEvent);
+    const events: NarrativeEvent[] = [];
+    for (const r of raw) {
+      try {
+        events.push(JSON.parse(r) as NarrativeEvent);
+      } catch (err) {
+        console.debug("[NarrativeEngine] Skipping corrupted narrative entry:", err);
+      }
+    }
+    return events;
   }
 
   /**

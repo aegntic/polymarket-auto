@@ -60,15 +60,17 @@ Agents communicate _exclusively_ through Redis pub/sub channels:
 ### Financial and API Constraints
 
 - **Max LLM Budget:** $10/day (hard cap). This includes VIRAL LLM generation.
-- **Max Deployments:** 50 clone deployments per day (across all networks).
+- **Max Clone Deployments:** 200/day across all networks, 30/hour burst cap.
+- **Token Observations:** Uncapped (data ingestion from DexScreener/WSS is free).
 - **Internal Economy:** Settle inter-agent service payments atomically via Redis `MULTI/EXEC` in micro-USD.
 
-### Circuit Breakers (LLM processing & system limits)
+### Circuit Breakers (clone deployments & LLM budget)
 
-- **maxPerHour:** 200 / **maxPerDay:** 1000
-- **Green:** ≤ 70% capacity
-- **Orange:** 70-90% capacity (OR >40/hr OR >30% error rate)
-- **Red:** > 90% capacity (OR unauthorized operation = full halt)
+- **maxClonesPerHour:** 30 / **maxClonesPerDay:** 200
+- **Green:** All clear
+- **Yellow:** ≥ 40% of clone daily budget used
+- **Orange:** ≥ 70% of hourly or daily clone budget, or LLM approaching limit
+- **Red:** ≥ 90% of clone daily budget or LLM daily budget exhausted
 
 ## 4. Agent Mechanical Overrides
 
