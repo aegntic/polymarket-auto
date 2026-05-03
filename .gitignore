@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# build
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env*.local
+
+# database
+*.db
+*.db-journal
+prisma/dev.db
+
+# logs
+*.log
+dev.log
+server.log
+
+# debug
+npm-debug.log*
+
+# misc
+.DS_Store
+*.pem
+*.tar
+3001/
+3456/
+download/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
