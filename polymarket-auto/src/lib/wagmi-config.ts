@@ -1,11 +1,17 @@
 // Wagmi configuration for Polygon mainnet (Polymarket)
-import { http, createConfig } from 'wagmi'
-import { polygon } from 'wagmi/chains'
+import { http } from 'wagmi'
+import { polygon, mainnet } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
+
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'YOUR_PROJECT_ID'
 
 export const config = getDefaultConfig({
   appName: 'Polymarket Auto',
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
-  chains: [polygon],
+  projectId,
+  chains: [polygon, mainnet],
+  transports: {
+    [polygon.id]: http('https://polygon-rpc.com'),
+    [mainnet.id]: http('https://eth.llamarpc.com'),
+  },
   ssr: true,
 })

@@ -1,0 +1,11 @@
+{
+  "name": "trade-feed",
+  "version": "1.0.0",
+  "description": "Real-time trade feed WebSocket service for Polymarket Wallet Analyzer",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}

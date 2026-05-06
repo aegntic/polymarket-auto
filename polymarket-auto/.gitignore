@@ -30,9 +30,13 @@ npm-debug.log*
 .DS_Store
 *.pem
 *.tar
-3001/
-3456/
+3001
+3456
 download/
+get-private-key.mjs
+*.db
+*.db-shm
+*.db-wal
 
 # IDE
 .idea/

@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Wallet {
+  id           String   @id @default(cuid())
+  address      String   @unique
+  label        String?
+  totalPnl     Float    @default(0)
+  winRate      Float    @default(0)
+  totalTrades  Int      @default(0)
+  avgPositionSize Float  @default(0)
+  edgeScore    Float    @default(0)
+  isEdgeTrader Boolean  @default(false)
+  firstSeen    DateTime @default(now())
+  lastActive   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  trades       Trade[]
+}
+
+model Market {
+  id              String   @id @default(cuid())
+  title           String
+  slug            String   @unique
+  category        String
+  yesPrice        Float    @default(0.5)
+  noPrice         Float    @default(0.5)
+  volume          Float    @default(0)
+  liquidity       Float    @default(0)
+  mispricingScore Float?
+  endDate         DateTime?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  trades          Trade[]
+}
+
+model Trade {
+  id          String   @id @default(cuid())
+  walletId    String
+  marketId    String
+  side        String   // YES or NO
+  size        Float
+  price       Float
+  kellySize   Float?
+  pnl         Float?
+  isAgentTrade Boolean @default(false)
+  agentReasoning String?
+  status      String   @default("filled") // filled, pending, cancelled
+  createdAt   DateTime @default(now())
+  wallet      Wallet   @relation(fields: [walletId], references: [id])
+  market      Market   @relation(fields: [marketId], references: [id])
+}
+
+model AgentState {
+  id              String   @id @default(cuid())
+  status          String   @default("idle") // idle, running, paused
+  currentStrategy String?
+  totalPnl        Float    @default(0)
+  totalTrades     Int      @default(0)
+  winRate         Float    @default(0)
+  sharpeRatio     Float?
+  maxDrawdown     Float?
+  startedAt       DateTime?
+  lastDecisionAt  DateTime?
+  capitalBase     Float    @default(25)
+  currentCapital  Float    @default(25)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model NewsEvent {
+  id          String   @id @default(cuid())
+  title       String
+  source      String
+  category    String
+  sentiment   Float    @default(0) // -1 to 1
+  impactScore Float    @default(0) // 0 to 1
+  relatedMarketIds String? // comma-separated market IDs
+  processedByAgent Boolean @default(false)
+  agentAction String?
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
+
+model AgentDecision {
+  id          String   @id @default(cuid())
+  type        String   // scan, analyze, trade, hold, exit
+  reasoning   String
+  confidence  Float    @default(0)
+  marketId    String?
+  action      String?
+  size        Float?
+  kellyFraction Float?
+  outcome     String?  // success, failure, pending
+  pnl         Float?
+  createdAt   DateTime @default(now())
+}
+
+model ConnectedWallet {
+  id            String   @id @default(cuid())
+  address       String   @unique
+  label         String?
+  network       String   @default("polygon")  // polygon, ethereum, base
+  balanceUsdc   Float    @default(0)
+  balanceMatic  Float    @default(0)
+  isActive      Boolean  @default(true)
+  isFunded      Boolean  @default(false)
+  lastSyncedAt  DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

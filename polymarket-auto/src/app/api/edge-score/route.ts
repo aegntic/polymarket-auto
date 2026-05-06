@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { scoreTopMarkets, type MarketEdgeScore } from '@/lib/edge-scorer'
 import { runRiskChecks, DEFAULT_RISK_CONFIG } from '@/lib/risk-guardian'
+import { logger } from '@/lib/logger'
 
 export async function GET(request: Request) {
   try {
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
       scores: enriched,
     })
   } catch (error: any) {
-    console.error('[EdgeScore API] Error:', error)
+    logger.error('EdgeScoreAPI', 'Error occurred during edge scoring', error)
     return NextResponse.json(
       { error: 'Edge scoring failed', details: error?.message },
       { status: 500 }

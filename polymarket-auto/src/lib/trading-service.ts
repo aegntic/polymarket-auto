@@ -3,6 +3,7 @@
 
 import { getContract, parseAbi, type WalletClient, type PublicClient } from 'viem'
 import { polygon } from 'wagmi/chains'
+import { logger } from './logger'
 
 // Polymarket smart contract addresses (Polygon mainnet)
 export const CONTRACTS = {
@@ -118,7 +119,7 @@ export async function placeTrade(
       transactionHash: hash,
     }
   } catch (error: any) {
-    console.error('[Trading] Error placing trade:', error)
+    logger.error('TradingService', 'Error placing trade:', error)
     return {
       success: false,
       error: error?.message || 'Unknown error',
