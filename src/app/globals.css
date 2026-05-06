@@ -1,0 +1,1526 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.07 0.01 260);
+  --foreground: oklch(0.89 0.01 260);
+  --card: oklch(0.12 0.01 260);
+  --card-foreground: oklch(0.89 0.01 260);
+  --popover: oklch(0.12 0.01 260);
+  --popover-foreground: oklch(0.89 0.01 260);
+  --primary: oklch(0.7 0.25 150);
+  --primary-foreground: oklch(0.12 0.01 260);
+  --secondary: oklch(0.18 0.01 260);
+  --secondary-foreground: oklch(0.89 0.01 260);
+  --muted: oklch(0.18 0.01 260);
+  --muted-foreground: oklch(0.55 0.01 260);
+  --accent: oklch(0.18 0.01 260);
+  --accent-foreground: oklch(0.89 0.01 260);
+  --destructive: oklch(0.6 0.22 25);
+  --border: oklch(0.22 0.01 260);
+  --input: oklch(0.22 0.01 260);
+  --ring: oklch(0.55 0.01 260);
+  --chart-1: oklch(0.7 0.25 150);
+  --chart-2: oklch(0.7 0.2 80);
+  --chart-3: oklch(0.7 0.15 190);
+  --chart-4: oklch(0.6 0.25 300);
+  --chart-5: oklch(0.65 0.22 25);
+  --sidebar: oklch(0.1 0.01 260);
+  --sidebar-foreground: oklch(0.89 0.01 260);
+  --sidebar-primary: oklch(0.7 0.25 150);
+  --sidebar-primary-foreground: oklch(0.12 0.01 260);
+  --sidebar-accent: oklch(0.18 0.01 260);
+  --sidebar-accent-foreground: oklch(0.89 0.01 260);
+  --sidebar-border: oklch(0.22 0.01 260);
+  --sidebar-ring: oklch(0.55 0.01 260);
+}
+
+.dark {
+  --background: oklch(0.07 0.01 260);
+  --foreground: oklch(0.89 0.01 260);
+  --card: oklch(0.12 0.01 260);
+  --card-foreground: oklch(0.89 0.01 260);
+  --popover: oklch(0.12 0.01 260);
+  --popover-foreground: oklch(0.89 0.01 260);
+  --primary: oklch(0.7 0.25 150);
+  --primary-foreground: oklch(0.12 0.01 260);
+  --secondary: oklch(0.18 0.01 260);
+  --secondary-foreground: oklch(0.89 0.01 260);
+  --muted: oklch(0.18 0.01 260);
+  --muted-foreground: oklch(0.55 0.01 260);
+  --accent: oklch(0.18 0.01 260);
+  --accent-foreground: oklch(0.89 0.01 260);
+  --destructive: oklch(0.6 0.22 25);
+  --border: oklch(0.22 0.01 260);
+  --input: oklch(0.22 0.01 260);
+  --ring: oklch(0.55 0.01 260);
+  --chart-1: oklch(0.7 0.25 150);
+  --chart-2: oklch(0.7 0.2 80);
+  --chart-3: oklch(0.7 0.15 190);
+  --chart-4: oklch(0.6 0.25 300);
+  --chart-5: oklch(0.65 0.22 25);
+  --sidebar: oklch(0.1 0.01 260);
+  --sidebar-foreground: oklch(0.89 0.01 260);
+  --sidebar-primary: oklch(0.7 0.25 150);
+  --sidebar-primary-foreground: oklch(0.12 0.01 260);
+  --sidebar-accent: oklch(0.18 0.01 260);
+  --sidebar-accent-foreground: oklch(0.89 0.01 260);
+  --sidebar-border: oklch(0.22 0.01 260);
+  --sidebar-ring: oklch(0.55 0.01 260);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* ─── Custom Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1e293b transparent;
+}
+
+/* ─── Subtle Pulse Animation ─── */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle calc(var(--anim-speed, 1) * 3s) ease-in-out infinite;
+}
+
+/* ─── Glow Text Effects ─── */
+.glow-green {
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.4), 0 0 20px rgba(0, 255, 65, 0.2), 0 0 40px rgba(0, 255, 65, 0.1);
+}
+
+.glow-amber {
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.4), 0 0 20px rgba(245, 158, 11, 0.2);
+}
+
+.glow-cyan {
+  text-shadow: 0 0 10px rgba(34, 211, 238, 0.4), 0 0 20px rgba(34, 211, 238, 0.2);
+}
+
+.glow-red {
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.4), 0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+/* ─── Scanline Overlay Effect (subtle) ─── */
+.scanline-overlay {
+  position: relative;
+}
+
+.scanline-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.015) 3px,
+    rgba(0, 0, 0, 0.015) 6px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ─── Grid Line Pattern Overlay (very subtle) ─── */
+.grid-pattern-overlay {
+  position: relative;
+}
+
+.grid-pattern-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 255, 65, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.015) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Number Counting Up Animation ─── */
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-count-up {
+  animation: count-up 0.6s ease-out forwards;
+}
+
+/* ─── Glitch Animation for Logo ─── */
+@keyframes glitch {
+  0% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+  100% { transform: translate(0); }
+}
+
+@keyframes glitch-skew {
+  0% { transform: skew(0deg); }
+  20% { transform: skew(-1deg); }
+  40% { transform: skew(0.5deg); }
+  60% { transform: skew(-0.5deg); }
+  80% { transform: skew(1deg); }
+  100% { transform: skew(0deg); }
+}
+
+.glitch-hover:hover {
+  animation: glitch 0.3s cubic-bezier(.25, .46, .45, .94) both;
+  text-shadow:
+    0 0 10px rgba(0, 255, 65, 0.6),
+    -2px 0 rgba(255, 0, 0, 0.3),
+    2px 0 rgba(0, 255, 255, 0.3);
+}
+
+/* ─── Typing Animation ─── */
+@keyframes typing-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.typing-cursor {
+  animation: typing-cursor 1s step-end infinite;
+}
+
+@keyframes typewriter {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+/* ─── Border Animation for Autonomous Mode Badge ─── */
+@keyframes border-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes border-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(0, 255, 65, 0.2), 0 0 10px rgba(0, 255, 65, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.4), 0 0 20px rgba(0, 255, 65, 0.2), 0 0 30px rgba(0, 255, 65, 0.1);
+  }
+}
+
+.animate-border-glow {
+  animation: border-glow calc(var(--anim-speed, 1) * 2s) ease-in-out infinite;
+}
+
+/* ─── Metric Card Pulse ─── */
+@keyframes metric-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(0, 255, 65, 0);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(0, 255, 65, 0.1), 0 0 4px rgba(0, 255, 65, 0.05);
+  }
+}
+
+.animate-metric-pulse {
+  animation: metric-pulse calc(var(--anim-speed, 1) * 4s) ease-in-out infinite;
+}
+
+/* ─── Edge Trader Glow ─── */
+@keyframes edge-glow {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(0, 255, 65, 0.05), inset 0 0 4px rgba(0, 255, 65, 0.02);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(0, 255, 65, 0.12), inset 0 0 8px rgba(0, 255, 65, 0.04);
+  }
+}
+
+.animate-edge-glow {
+  animation: edge-glow calc(var(--anim-speed, 1) * 3s) ease-in-out infinite;
+}
+
+/* ─── Slide In Animation ─── */
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.4s ease-out forwards;
+}
+
+/* ─── Flash Animation for New Items ─── */
+@keyframes flash-green {
+  0% { background-color: rgba(0, 255, 65, 0.15); }
+  100% { background-color: transparent; }
+}
+
+.animate-flash {
+  animation: flash-green 1s ease-out forwards;
+}
+
+/* ─── Terminal Header ─── */
+.terminal-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #0a0e17;
+  border-bottom: 1px solid #1e293b;
+  border-radius: 8px 8px 0 0;
+}
+
+.terminal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* ─── Sentiment Gauge ─── */
+.sentiment-gauge {
+  position: relative;
+  width: 48px;
+  height: 24px;
+  overflow: hidden;
+}
+
+.sentiment-gauge-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  border-radius: 24px 24px 0 0;
+  transform-origin: bottom center;
+}
+
+/* ─── Return Multiple Badge ─── */
+@keyframes return-glow {
+  0%, 100% {
+    text-shadow: 0 0 10px rgba(0, 255, 65, 0.4), 0 0 20px rgba(0, 255, 65, 0.2);
+  }
+  50% {
+    text-shadow: 0 0 15px rgba(0, 255, 65, 0.6), 0 0 30px rgba(0, 255, 65, 0.3), 0 0 45px rgba(0, 255, 65, 0.1);
+  }
+}
+
+.animate-return-glow {
+  animation: return-glow 2.5s ease-in-out infinite;
+}
+
+/* ─── Card Hover Effects ─── */
+.card-hover-glow {
+  transition: all 0.3s ease;
+}
+
+.card-hover-glow:hover {
+  border-color: rgba(0, 255, 65, 0.15);
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.05), 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Gradient Card Header Accents ─── */
+.card-accent-green {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-accent-green::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #00ff41, transparent);
+  opacity: 0.6;
+}
+
+.card-accent-cyan {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-accent-cyan::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #22d3ee, transparent);
+  opacity: 0.6;
+}
+
+.card-accent-amber {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-accent-amber::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #f59e0b, transparent);
+  opacity: 0.6;
+}
+
+.card-accent-purple {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-accent-purple::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #a855f7, transparent);
+  opacity: 0.6;
+}
+
+.card-accent-red {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-accent-red::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #ef4444, transparent);
+  opacity: 0.6;
+}
+
+/* ─── Shimmer Loading Effect ─── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, #1e293b 25%, #2d3a4d 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  animation: shimmer calc(var(--anim-speed, 1) * 1.5s) ease-in-out infinite;
+}
+
+/* ─── Fade-in Stagger Animation ─── */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+
+/* ─── Data Pulse for Real-Time Updates ─── */
+@keyframes data-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 65, 0.15);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(0, 255, 65, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 65, 0);
+  }
+}
+
+.animate-data-pulse {
+  animation: data-pulse 2s ease-out infinite;
+}
+
+/* ─── Breathing Glow for Status Indicators ─── */
+@keyframes breathe {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.animate-breathe {
+  animation: breathe calc(var(--anim-speed, 1) * 2s) ease-in-out infinite;
+}
+
+/* ─── Glass Morphism for Cards ─── */
+.glass-card {
+  background: rgba(15, 23, 36, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(30, 41, 59, 0.6);
+}
+
+/* ─── Neon Text Underline ─── */
+.neon-underline {
+  position: relative;
+}
+
+.neon-underline::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  opacity: 0.3;
+}
+
+/* ─── Hover lift for interactive cards ─── */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Glow Purple ─── */
+.glow-purple {
+  text-shadow: 0 0 10px rgba(168, 85, 247, 0.4), 0 0 20px rgba(168, 85, 247, 0.2);
+}
+
+/* ─── Animated gradient border ─── */
+@keyframes gradient-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-gradient-border {
+  background: linear-gradient(90deg, #00ff41, #22d3ee, #a855f7, #00ff41);
+  background-size: 300% 100%;
+  animation: gradient-rotate 4s ease infinite;
+}
+
+/* ─── Pulse ring for live indicators ─── */
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 65, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(0, 255, 65, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 65, 0);
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring calc(var(--anim-speed, 1) * 2s) cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* ─── Smooth number transition ─── */
+@keyframes number-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.animate-number-pop {
+  animation: number-pop 0.3s ease-out;
+}
+
+/* ─── Card inner glow on hover ─── */
+.card-inner-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-inner-glow::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(0, 255, 65, 0.03) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.card-inner-glow:hover::after {
+  opacity: 1;
+}
+
+/* ─── Status dot variants ─── */
+.status-dot-live {
+  position: relative;
+}
+
+.status-dot-live::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: rgba(0, 255, 65, 0.3);
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* ─── Timeline connector line ─── */
+.timeline-line {
+  position: absolute;
+  left: 11px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #1e293b, #22d3ee20, #1e293b);
+}
+
+/* ─── Depth chart bar animation ─── */
+@keyframes bar-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.animate-bar-grow {
+  animation: bar-grow 0.6s ease-out forwards;
+  transform-origin: left;
+}
+
+/* ─── Network node pulse ─── */
+@keyframes node-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 3px rgba(0, 255, 65, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(0, 255, 65, 0.6));
+  }
+}
+
+.animate-node-pulse {
+  animation: node-pulse calc(var(--anim-speed, 1) * 3s) ease-in-out infinite;
+}
+
+/* ─── Staggered fade in ─── */
+.stagger-item {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: fade-in-up 0.4s ease-out forwards;
+}
+
+/* ─── Live Price Ticker Scroll ─── */
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  animation: ticker-scroll 600s linear infinite;
+}
+
+/* ─── Card Accent Gradient Line (wider, more visible) ─── */
+.card-accent-green::before,
+.card-accent-cyan::before,
+.card-accent-amber::before,
+.card-accent-purple::before,
+.card-accent-red::before {
+  height: 2px;
+  opacity: 0.7;
+}
+
+/* ─── Stat Gauge Bar ─── */
+.gauge-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: #1e293b;
+  overflow: hidden;
+}
+
+.gauge-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.gauge-bar-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15));
+  border-radius: 0 3px 3px 0;
+}
+
+/* ─── Correlation Heatmap Cell ─── */
+.heatmap-cell {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+  cursor: pointer;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.12);
+  z-index: 10;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.3);
+}
+
+/* ─── Strategy Parameter Row ─── */
+.strategy-param {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.3);
+}
+
+.strategy-param:last-child {
+  border-bottom: none;
+}
+
+/* ─── Animated Section Divider ─── */
+.section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #1e293b, #22d3ee20, #1e293b, transparent);
+  margin: 8px 0;
+}
+
+/* ─── Tooltip Dark Theme ─── */
+.tooltip-dark {
+  background: #0f1724 !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 6px !important;
+  color: #e2e8f0 !important;
+  font-size: 10px !important;
+  font-family: monospace !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* ─── Glow ring for active strategy ─── */
+@keyframes strategy-pulse {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(34, 211, 238, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.2), 0 0 24px rgba(34, 211, 238, 0.08);
+  }
+}
+
+.animate-strategy-pulse {
+  animation: strategy-pulse calc(var(--anim-speed, 1) * 3s) ease-in-out infinite;
+}
+
+/* ─── Correlation badge ─── */
+.correlation-badge-high {
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid rgba(0, 255, 65, 0.25);
+  color: #00ff41;
+}
+
+.correlation-badge-med {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+}
+
+.correlation-badge-low {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+}
+
+/* ─── Micro-interaction: value change flash ─── */
+@keyframes value-flash {
+  0% { color: #fff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.5); }
+  100% { color: inherit; text-shadow: none; }
+}
+
+.animate-value-flash {
+  animation: value-flash 0.6s ease-out;
+}
+
+/* ─── Scrollbar for heatmap ─── */
+.heatmap-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.heatmap-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ─── Footer glow line ─── */
+.footer-glow-line {
+  position: relative;
+}
+
+.footer-glow-line::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.2), transparent);
+}
+
+/* ─── Glass Card Variant (enhanced glassmorphism) ─── */
+.glass-card-v2 {
+  background: rgba(15, 23, 36, 0.65);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid rgba(30, 41, 59, 0.5);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.glass-card-v2:hover {
+  border-color: rgba(30, 41, 59, 0.8);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* ─── Gradient Border Card ─── */
+.gradient-border-card {
+  position: relative;
+  background: #0f1724;
+  border-radius: 0.75rem;
+}
+
+.gradient-border-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 0.75rem;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(0, 255, 65, 0.15), rgba(34, 211, 238, 0.08), rgba(168, 85, 247, 0.1), rgba(0, 255, 65, 0.05));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.gradient-border-card:hover::before {
+  opacity: 1;
+}
+
+/* ─── Animated gradient accent (wide band) ─── */
+@keyframes accent-flow {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 200% 0%; }
+  100% { background-position: 0% 0%; }
+}
+
+.card-accent-animated::before {
+  background: linear-gradient(90deg, transparent, #00ff41, #22d3ee, #00ff41, transparent) !important;
+  background-size: 200% 100% !important;
+  animation: accent-flow calc(var(--anim-speed, 1) * 6s) ease-in-out infinite !important;
+  height: 2px !important;
+  opacity: 0.8 !important;
+}
+
+/* ─── Donut chart center text ─── */
+.donut-center-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ─── Sentiment bar ─── */
+.sentiment-bar {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ef4444 0%, #f59e0b 30%, #22d3ee 70%, #00ff41 100%);
+  overflow: hidden;
+}
+
+.sentiment-indicator {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 10px;
+  background: #fff;
+  border-radius: 1px;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+  transition: left 0.5s ease;
+}
+
+/* ─── Card hover shimmer effect ─── */
+.card-shimmer-hover {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-shimmer-hover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.02), transparent);
+  transition: none;
+  pointer-events: none;
+}
+
+.card-shimmer-hover:hover::after {
+  animation: card-shimmer-pass 0.8s ease-out;
+}
+
+@keyframes card-shimmer-pass {
+  from { left: -100%; }
+  to { left: 200%; }
+}
+
+/* ─── Dot pulse for live indicators ─── */
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.animate-dot-pulse {
+  animation: dot-pulse 2s ease-in-out infinite;
+}
+
+/* ─── Ribbon badge ─── */
+.ribbon-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 2px 12px 2px 8px;
+  font-size: 8px;
+  font-weight: 700;
+  font-family: monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 8px 50%);
+}
+
+/* ─── PnL color helpers ─── */
+.pnl-positive { color: #00ff41; }
+.pnl-negative { color: #ef4444; }
+.pnl-neutral { color: #475569; }
+
+/* ─── Responsive hide utility ─── */
+@media (max-width: 640px) {
+  .hide-mobile { display: none !important; }
+}
+
+/* ─── Enhanced Dashboard Card ─── */
+.dash-card {
+  background: rgba(15, 23, 36, 0.75);
+  backdrop-filter: blur(12px) saturate(1.1);
+  border: 1px solid rgba(30, 41, 59, 0.5);
+  border-radius: 0.875rem;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.dash-card:hover {
+  border-color: rgba(0, 255, 65, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), 0 0 12px rgba(0, 255, 65, 0.03);
+}
+
+/* ─── Tab panel transition ─── */
+@keyframes tab-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-tab-fade {
+  animation: tab-fade-in 0.35s ease-out forwards;
+}
+
+/* ─── Enhanced section header ─── */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.3);
+}
+
+.section-header-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* ─── Badge glow effect ─── */
+@keyframes badge-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(0, 255, 65, 0.1); }
+  50% { box-shadow: 0 0 10px rgba(0, 255, 65, 0.2), 0 0 20px rgba(0, 255, 65, 0.05); }
+}
+
+.badge-glow {
+  animation: badge-glow calc(var(--anim-speed, 1) * 3s) ease-in-out infinite;
+}
+
+/* ─── Card title styling ─── */
+.card-title-cyber {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+/* ─── Responsive tab layout ─── */
+@media (max-width: 768px) {
+  .tab-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tab-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ─── Enhanced time filter button ─── */
+.time-filter-active {
+  background: rgba(0, 255, 65, 0.12);
+  color: #00ff41;
+  border-bottom: 2px solid #00ff41;
+  padding-bottom: 2px;
+}
+
+.time-filter-inactive {
+  color: #475569;
+  transition: all 0.2s ease;
+}
+
+.time-filter-inactive:hover {
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ─── Enhanced card shadow on hover ─── */
+.card-hover-enhanced {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover-enhanced:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 255, 65, 0.08);
+  transform: translateY(-1px);
+}
+
+/* ─── Better badge styling ─── */
+.badge-edge {
+  background: rgba(0, 255, 65, 0.15) !important;
+  color: #00ff41 !important;
+  border: 1px solid rgba(0, 255, 65, 0.3) !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+  font-size: 9px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.3);
+}
+
+.badge-yes {
+  background: rgba(0, 255, 65, 0.12) !important;
+  color: #00ff41 !important;
+  border: 1px solid rgba(0, 255, 65, 0.2) !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em;
+}
+
+.badge-no {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #ef4444 !important;
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Log entry left border ─── */
+.log-entry {
+  border-left: 2px solid transparent;
+  padding-left: 8px;
+  transition: border-color 0.2s ease;
+}
+
+.log-entry:hover {
+  border-left-color: rgba(0, 255, 65, 0.3);
+}
+
+.log-entry-type-scan {
+  border-left-color: rgba(34, 211, 238, 0.3);
+}
+
+.log-entry-type-trade {
+  border-left-color: rgba(0, 255, 65, 0.3);
+}
+
+.log-entry-type-alert {
+  border-left-color: rgba(245, 158, 11, 0.3);
+}
+
+/* ─── Chart axis label improvement ─── */
+.chart-axis-label {
+  fill: #64748b;
+  font-size: 11px;
+  font-family: 'Geist Mono', monospace;
+}
+
+/* ─── Category filter button active state ─── */
+.category-filter-active {
+  background: rgba(0, 255, 65, 0.12);
+  color: #00ff41;
+  border: 1px solid rgba(0, 255, 65, 0.25);
+}
+
+/* ─── Responsive grid gap ─── */
+@media (max-width: 768px) {
+  .mobile-compact {
+    gap: 12px;
+    padding: 12px;
+  }
+}
+
+/* ─── Bell shake animation for new alerts ─── */
+@keyframes bell-shake {
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-12deg); }
+  45% { transform: rotate(10deg); }
+  60% { transform: rotate(-8deg); }
+  75% { transform: rotate(4deg); }
+}
+
+.animate-bell-shake {
+  animation: bell-shake 0.6s ease-out;
+}
+
+/* ─── Badge pulse for unread count ─── */
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.25); }
+}
+
+.animate-badge-pulse {
+  animation: badge-pulse 0.4s ease-out;
+}
+
+/* ─── Deep Card Shadow (for important cards) ─── */
+.card-shadow-deep {
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 8px 24px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.card-shadow-deep:hover {
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.25),
+    0 12px 36px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 16px rgba(0, 255, 65, 0.03);
+}
+
+/* ─── Gradient Overlay for Chart Cards ─── */
+.chart-gradient-bg {
+  background: linear-gradient(180deg, rgba(0, 255, 65, 0.02) 0%, transparent 40%);
+}
+
+/* ─── Animated corner accent for featured cards ─── */
+@keyframes corner-glow {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+
+.corner-accent-tl::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40px;
+  height: 40px;
+  background: radial-gradient(circle at top left, rgba(0, 255, 65, 0.08), transparent 70%);
+  pointer-events: none;
+  animation: corner-glow 4s ease-in-out infinite;
+}
+
+.corner-accent-tr::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  background: radial-gradient(circle at top right, rgba(0, 255, 65, 0.08), transparent 70%);
+  pointer-events: none;
+  animation: corner-glow 4s ease-in-out infinite;
+}
+
+/* ─── Status pulse ring (enhanced) ─── */
+@keyframes status-ring {
+  0% { box-shadow: 0 0 0 0 rgba(0, 255, 65, 0.4); }
+  70% { box-shadow: 0 0 0 4px rgba(0, 255, 65, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 255, 65, 0); }
+}
+
+.status-ring {
+  animation: status-ring 2s ease-out infinite;
+}
+
+/* ─── Header gradient underline ─── */
+.header-gradient-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #00ff4120 20%, #22d3ee20 50%, #a855f720 80%, transparent 100%);
+}
+
+/* ─── Tab indicator animation ─── */
+.tab-indicator {
+  position: relative;
+}
+
+.tab-indicator::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 2px;
+  background: #00ff41;
+  border-radius: 1px;
+  transition: width 0.3s ease;
+}
+
+.tab-indicator:hover::after {
+  width: 60%;
+}
+
+/* ─── Metric value highlight ─── */
+@keyframes metric-highlight {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.metric-highlight {
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.06), transparent);
+  background-size: 200% 100%;
+  animation: metric-highlight 3s ease-out;
+}
+
+/* ─── Card border glow on focus ─── */
+.card-focus-glow:focus-within {
+  border-color: rgba(0, 255, 65, 0.2);
+  box-shadow: 0 0 12px rgba(0, 255, 65, 0.05);
+}
+
+/* ─── Gradient text for important values ─── */
+.gradient-text-green {
+  background: linear-gradient(135deg, #00ff41, #22d3ee);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Subtle noise texture overlay ─── */
+.noise-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Flat card style - minimal effects, no glassmorphism, no glow ─── */
+[data-card-style="flat"] .dash-card,
+[data-card-style="flat"] .glass-card-v2 {
+  background: rgba(15, 23, 36, 0.95);
+  backdrop-filter: none;
+  border: 1px solid rgba(30, 41, 59, 0.7);
+  box-shadow: none;
+}
+
+[data-card-style="flat"] .card-accent-green::before,
+[data-card-style="flat"] .card-accent-cyan::before,
+[data-card-style="flat"] .card-accent-amber::before,
+[data-card-style="flat"] .card-accent-purple::before,
+[data-card-style="flat"] .card-accent-red::before {
+  opacity: 0.3;
+}
+
+[data-card-style="flat"] .card-shadow-deep {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Neon card style - enhanced glow, stronger accents ─── */
+[data-card-style="neon"] .dash-card {
+  border-color: rgba(0, 255, 65, 0.1);
+  box-shadow: 0 0 8px rgba(0, 255, 65, 0.02), inset 0 0 20px rgba(0, 255, 65, 0.01);
+}
+
+[data-card-style="neon"] .card-accent-green::before,
+[data-card-style="neon"] .card-accent-cyan::before,
+[data-card-style="neon"] .card-accent-amber::before,
+[data-card-style="neon"] .card-accent-purple::before,
+[data-card-style="neon"] .card-accent-red::before {
+  opacity: 1;
+  height: 3px;
+  filter: blur(0.5px);
+}
+
+[data-card-style="neon"] .card-shadow-deep {
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(0, 255, 65, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+[data-card-style="neon"] .dash-card:hover {
+  border-color: rgba(0, 255, 65, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 24px rgba(0, 255, 65, 0.06);
+}
+
+/* ─── Tab hover animation ─── */
+.tab-btn-hover {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.tab-btn-hover::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: #00ff41;
+  border-radius: 1px;
+  transition: all 0.25s ease;
+  transform: translateX(-50%);
+}
+
+.tab-btn-hover:hover::after {
+  width: 60%;
+}
+
+/* ─── Card section breathing space ─── */
+.card-section-gap {
+  margin-bottom: 16px;
+}
+
+/* ─── Enhanced card inner spacing ─── */
+.card-inner-spacing {
+  padding: 16px;
+}
+
+@media (min-width: 640px) {
+  .card-inner-spacing {
+    padding: 20px;
+  }
+}
+
+/* ─── Stat row with better alignment ─── */
+.stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.2);
+}
+
+.stat-row:last-child {
+  border-bottom: none;
+}
+
+/* ─── Value badge with subtle glow ─── */
+.value-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: 'Geist Mono', monospace;
+}
+
+.value-badge-green {
+  background: rgba(0, 255, 65, 0.08);
+  color: #00ff41;
+  border: 1px solid rgba(0, 255, 65, 0.15);
+}
+
+.value-badge-amber {
+  background: rgba(245, 158, 11, 0.08);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.value-badge-cyan {
+  background: rgba(34, 211, 238, 0.08);
+  color: #22d3ee;
+  border: 1px solid rgba(34, 211, 238, 0.15);
+}
+
+.value-badge-red {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+/* ─── Divider with glow ─── */
+.glow-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.15), transparent);
+  margin: 12px 0;
+}
+
+/* ─── Tooltip arrow ─── */
+.tooltip-arrow {
+  position: relative;
+}
+
+.tooltip-arrow::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 5px solid #1e293b;
+}
+
+/* ─── Hide Next.js Dev Overlay Indicator ─── */
+[data-nextjs-dialog-overlay],
+nextjs-portal,
+#nextjs-portal {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+button[class*="nextjs"] {
+  z-index: 40 !important;
+  bottom: 56px !important;
+  opacity: 0.2 !important;
+  transition: opacity 0.3s ease;
+}
+
+button[class*="nextjs"]:hover {
+  opacity: 1 !important;
+}

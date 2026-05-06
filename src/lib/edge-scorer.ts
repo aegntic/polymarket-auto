@@ -5,6 +5,7 @@
 
 import { fetchMarkets, normalizeMarket, type PolymarketMarket } from '@/lib/polymarket-api'
 import { db } from '@/lib/db'
+import { logger } from './logger'
 
 const XAI_API_KEY = process.env.XAI_API_KEY
 
@@ -222,7 +223,7 @@ export async function scoreTopMarkets(limit = 20): Promise<MarketEdgeScore[]> {
       const score = await scoreMarket(market)
       scores.push(score)
     } catch (err: any) {
-      console.warn(`[EdgeScorer] Failed to score ${market.question}: ${err.message}`)
+      logger.warn('EdgeScorer', `Failed to score ${market.question}: ${err.message}`)
     }
   }
 

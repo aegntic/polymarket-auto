@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLiveData } from '@/hooks/useLiveData'
-import { useConnectModal } from '@rainbow-me/rainbowkit'
+import { useAccount, useBalance } from 'wagmi'
 import { useDashboardStore, type AgentState } from '@/lib/store'
 import { WalletLeaderboard } from '@/components/dashboard/WalletLeaderboard'
 import { NewsFeed } from '@/components/dashboard/NewsFeed'
@@ -39,6 +39,7 @@ import { PortfolioTimeline } from '@/components/dashboard/PortfolioTimeline'
 import { WalletComparisonTool } from '@/components/dashboard/WalletComparisonTool'
 import { OrderBookDepth } from '@/components/dashboard/OrderBookDepth'
 import { WalletConnectPanel } from '@/components/dashboard/WalletConnectPanel'
+import { WalletMenu } from '@/components/dashboard/WalletMenu'
 import { ToastNotificationSystem } from '@/components/dashboard/ToastNotificationSystem'
 import { useDashboardSettings } from '@/hooks/useDashboardSettings'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -234,7 +235,6 @@ function SystemStatus() {
 export default function DashboardPage() {
   const liveData = useLiveData()
 
-  const { openConnectModal } = useConnectModal()
   const wsConnected = useDashboardStore((s) => s.wsConnected)
 
   const { settings } = useDashboardSettings()
@@ -271,7 +271,25 @@ export default function DashboardPage() {
   const walletAddress = useDashboardStore((s) => s.walletAddress)
   const walletBalance = useDashboardStore((s) => s.walletBalance)
   const liveCapital = useDashboardStore((s) => s.liveCapital)
+  const setWalletConnection = useDashboardStore((s) => s.setWalletConnection)
   const agent = agentData?.state
+
+  // Sync wagmi wallet state to Zustand store (runs at top level, always mounted)
+  const { address: wagmiAddress, isConnected: wagmiConnected } = useAccount()
+  const { data: usdcBalance } = useBalance({
+    address: wagmiAddress,
+    token: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+    chainId: 137, // force Polygon
+  })
+
+  useEffect(() => {
+    if (wagmiConnected && wagmiAddress) {
+      const bal = usdcBalance ? parseFloat(usdcBalance.formatted) : 0
+      setWalletConnection(wagmiAddress, bal)
+    } else {
+      setWalletConnection(null)
+    }
+  }, [wagmiConnected, wagmiAddress, usdcBalance, setWalletConnection])
 
   // Show "Connect Wallet" when disconnected, real balance when connected
   const displayCapital = walletAddress
@@ -334,7 +352,7 @@ export default function DashboardPage() {
                   className="text-xs text-[#94a3b8]"
                 />
               }
-              color="#475569"
+              color="#64748b"
             />
             <MetricCard
               icon={Zap}
@@ -350,12 +368,9 @@ export default function DashboardPage() {
                     className="text-sm font-bold text-[#00ff41] glow-green"
                   />
                 ) : (
-                  <button 
-                    onClick={() => openConnectModal()}
-                    className="text-sm font-bold text-[#64748b] hover:text-[#00ff41] transition-colors cursor-pointer bg-transparent border-none p-0"
-                  >
-                    Connect Wallet
-                  </button>
+                  <span className="text-sm font-bold text-[#64748b]">
+                    --
+                  </span>
                 )
               }
               color="#00ff41"
@@ -414,22 +429,16 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Agent Status */}
+          {/* Right side: Alerts + Wallet Menu */}
           <div className="relative flex items-center gap-2">
             <AlertCenter />
-            <div className="hidden items-center gap-2 rounded-lg border border-[#00ff41]/20 bg-[#00ff41]/5 px-3 py-1.5 sm:flex animate-border-glow">
-              <Shield className="h-3 w-3 text-[#00ff41]/60" />
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#00ff41]" />
-              <span className="text-[10px] font-bold tracking-widest text-[#00ff41] glow-green">
-                AUTONOMOUS
-              </span>
-            </div>
+            <WalletMenu />
           </div>
         </div>
 
         {/* System Status Row */}
         <div className="mx-auto mt-1.5 flex max-w-[1800px] items-center justify-between gap-4 border-t border-[#1e293b]/30 pt-1.5">
-          <div className="flex items-center gap-1.5 text-[9px] text-[#475569]">
+          <div className="flex items-center gap-1.5 text-[9px] text-[#64748b]">
             <Clock className="h-3 w-3 text-cyan-400" />
             <span>Elapsed:</span>
             <ElapsedCounter startTime={agent?.startedAt ?? null} />
@@ -457,7 +466,7 @@ export default function DashboardPage() {
                   className={`relative flex items-center gap-2 whitespace-nowrap px-4 py-2.5 text-xs font-semibold tracking-wide transition-all duration-200 ${
                     isActive
                       ? 'bg-[#00ff41]/10 text-[#00ff41] border-b-2 border-[#00ff41]'
-                      : 'text-[#475569] hover:text-[#94a3b8] border-b-2 border-transparent'
+                      : 'text-[#64748b] hover:text-[#94a3b8] border-b-2 border-transparent'
                   }`}
                   aria-selected={isActive}
                   role="tab"
@@ -616,7 +625,7 @@ export default function DashboardPage() {
 
       {/* ─── FOOTER ─── */}
       <footer className="footer-glow-line relative z-10 mt-auto border-t border-[#1e293b]/60 bg-[#0a0e17]/95 px-4 pb-20 pt-2.5 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1800px] items-center justify-between text-[10px] text-[#475569]">
+        <div className="mx-auto flex max-w-[1800px] items-center justify-between text-[10px] text-[#64748b]">
           <div className="flex items-center gap-3">
             <span className="font-mono font-medium text-[#00ff41]/60">
               POLYAGENT v7.2
@@ -644,8 +653,8 @@ export default function DashboardPage() {
                 </>
               ) : (
                 <>
-                  <WifiOff className="h-3 w-3 text-[#475569]" />
-                  <span className="text-[#475569]">OFF</span>
+                  <WifiOff className="h-3 w-3 text-[#64748b]" />
+                  <span className="text-[#64748b]">OFF</span>
                 </>
               )}
             </span>
