@@ -73,6 +73,10 @@ function runForceSimulation(
   const centerGravity = 0.02
   const damping = 0.85
 
+  // Map for O(1) node lookup
+  const nodeMap = new Map<string, GraphNode>()
+  for (const node of nodes) nodeMap.set(node.id, node)
+
   for (let iter = 0; iter < iterations; iter++) {
     const alpha = 1 - iter / iterations // cooling
 
@@ -82,8 +86,8 @@ function runForceSimulation(
         const dx = nodes[j].x - nodes[i].x
         const dy = nodes[j].y - nodes[i].y
         const distSq = Math.max(dx * dx + dy * dy, 1)
-        const dist = Math.sqrt(distSq)
         const force = (repulsionStrength * alpha) / distSq
+        const dist = Math.sqrt(distSq)
         const fx = (dx / dist) * force
         const fy = (dy / dist) * force
 
@@ -96,8 +100,8 @@ function runForceSimulation(
 
     // Attraction: along edges
     for (const edge of edges) {
-      const sourceNode = nodes.find((n) => n.id === edge.source)
-      const targetNode = nodes.find((n) => n.id === edge.target)
+      const sourceNode = nodeMap.get(edge.source)
+      const targetNode = nodeMap.get(edge.target)
       if (!sourceNode || !targetNode) continue
 
       const dx = targetNode.x - sourceNode.x
@@ -386,13 +390,36 @@ export function WalletNetworkGraph() {
 
     const data = buildGraphData(wallets, trades)
 
-    // Run force-directed layout simulation
+    // Run force-directed layout simulation (reduced iterations for perf)
     const svgWidth = 400
     const svgHeight = 350
-    runForceSimulation(data.nodes, data.edges, svgWidth, svgHeight, 150)
+    runForceSimulation(data.nodes, data.edges, svgWidth, svgHeight, 80)
 
     return data
   }, [wallets, trades])
+
+  // Pre-compute connected nodes for hovered state to avoid O(E) in render
+  const connectedToHoveredSet = useMemo(() => {
+    if (!hoveredNode) return null
+    const set = new Set<string>([hoveredNode])
+    for (const edge of graphData.edges) {
+      if (edge.source === hoveredNode) set.add(edge.target)
+      else if (edge.target === hoveredNode) set.add(edge.source)
+    }
+    return set
+  }, [hoveredNode, graphData.edges])
+
+  // Pre-compute highlighted edges
+  const highlightedEdgesSet = useMemo(() => {
+    if (!hoveredNode) return null
+    const set = new Set<string>()
+    for (const edge of graphData.edges) {
+      if (edge.source === hoveredNode || edge.target === hoveredNode) {
+        set.add(`${edge.source}-${edge.target}`)
+      }
+    }
+    return set
+  }, [hoveredNode, graphData.edges])
 
   // Compute node sizes based on PnL
   const { nodeSizeMap, maxPnl, minPnl } = useMemo(() => {
@@ -445,24 +472,19 @@ export function WalletNetworkGraph() {
   // Check if a node is connected to the hovered node
   const isConnectedToHovered = useCallback(
     (nodeId: string) => {
-      if (!hoveredNode) return true
-      if (nodeId === hoveredNode) return true
-      return graphData.edges.some(
-        (e) =>
-          (e.source === hoveredNode && e.target === nodeId) ||
-          (e.target === hoveredNode && e.source === nodeId)
-      )
+      if (!connectedToHoveredSet) return true
+      return connectedToHoveredSet.has(nodeId)
     },
-    [hoveredNode, graphData.edges]
+    [connectedToHoveredSet]
   )
 
-  // Check if an edge is connected to hovered node
+  // Check if an edge is highlighted
   const isEdgeHighlighted = useCallback(
     (edge: GraphEdge) => {
-      if (!hoveredNode) return true
-      return edge.source === hoveredNode || edge.target === hoveredNode
+      if (!highlightedEdgesSet) return true
+      return highlightedEdgesSet.has(`${edge.source}-${edge.target}`)
     },
-    [hoveredNode]
+    [highlightedEdgesSet]
   )
 
   // Mouse handlers

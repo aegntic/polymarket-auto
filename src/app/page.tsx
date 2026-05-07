@@ -1,48 +1,16 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
 import { useLiveData } from '@/hooks/useLiveData'
 import { useAccount, useBalance } from 'wagmi'
 import { useDashboardStore, type AgentState } from '@/lib/store'
-import { WalletLeaderboard } from '@/components/dashboard/WalletLeaderboard'
-import { NewsFeed } from '@/components/dashboard/NewsFeed'
-import { PerformanceChart } from '@/components/dashboard/PerformanceChart'
-import { RiskAnalysis } from '@/components/dashboard/RiskAnalysis'
-import { AgentConsole } from '@/components/dashboard/AgentConsole'
-import { MarketScanner } from '@/components/dashboard/MarketScanner'
-import { TradeFeed } from '@/components/dashboard/TradeFeed'
-import { KellySizer } from '@/components/dashboard/KellySizer'
-import { StrategyBacktest } from '@/components/dashboard/StrategyBacktest'
-import { PortfolioAllocation } from '@/components/dashboard/PortfolioAllocation'
-import { MatrixRain } from '@/components/dashboard/MatrixRain'
-import { DeploymentTimeline } from '@/components/dashboard/DeploymentTimeline'
-import { PnLHeatmap } from '@/components/dashboard/PnLHeatmap'
-import { TradeExport } from '@/components/dashboard/TradeExport'
-import { AgentPerformanceTimeline } from '@/components/dashboard/AgentPerformanceTimeline'
-import { MarketDepth } from '@/components/dashboard/MarketDepth'
-import { WalletNetworkGraph } from '@/components/dashboard/WalletNetworkGraph'
-import { CorrelationMatrix } from '@/components/dashboard/CorrelationMatrix'
-import { AgentStrategyPanel } from '@/components/dashboard/AgentStrategyPanel'
-import { LivePriceTicker } from '@/components/dashboard/LivePriceTicker'
-import { SentimentTimeline } from '@/components/dashboard/SentimentTimeline'
-import { PerformanceAttribution } from '@/components/dashboard/PerformanceAttribution'
-import { WalletActivityHeatmap } from '@/components/dashboard/WalletActivityHeatmap'
-import { TradeClustering } from '@/components/dashboard/TradeClustering'
-import { DashboardSettings } from '@/components/dashboard/DashboardSettings'
-import { AlertCenter } from '@/components/dashboard/AlertCenter'
-import { StrategyComparison } from '@/components/dashboard/StrategyComparison'
-import { MarketSentimentGauge } from '@/components/dashboard/MarketSentimentGauge'
-import { QuickActionsToolbar } from '@/components/dashboard/QuickActionsToolbar'
-import { TradeHistoryLog } from '@/components/dashboard/TradeHistoryLog'
-import { PortfolioTimeline } from '@/components/dashboard/PortfolioTimeline'
-import { WalletComparisonTool } from '@/components/dashboard/WalletComparisonTool'
-import { OrderBookDepth } from '@/components/dashboard/OrderBookDepth'
-import { WalletConnectPanel } from '@/components/dashboard/WalletConnectPanel'
 import { WalletMenu } from '@/components/dashboard/WalletMenu'
 import { ToastNotificationSystem } from '@/components/dashboard/ToastNotificationSystem'
 import { useDashboardSettings } from '@/hooks/useDashboardSettings'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Activity,
   Wifi,
@@ -65,6 +33,42 @@ import {
   Network,
   Search,
 } from 'lucide-react'
+
+// Dynamic Imports with loading states
+const PerformanceChart = dynamic(() => import('@/components/dashboard/PerformanceChart').then(mod => mod.PerformanceChart), { ssr: false, loading: () => <Skeleton className="h-[260px] w-full bg-[#1e293b]/50" /> })
+const PortfolioTimeline = dynamic(() => import('@/components/dashboard/PortfolioTimeline').then(mod => mod.PortfolioTimeline), { ssr: false, loading: () => <Skeleton className="h-[260px] w-full bg-[#1e293b]/50" /> })
+const WalletLeaderboard = dynamic(() => import('@/components/dashboard/WalletLeaderboard').then(mod => mod.WalletLeaderboard), { ssr: false })
+const NewsFeed = dynamic(() => import('@/components/dashboard/NewsFeed').then(mod => mod.NewsFeed), { ssr: false })
+const AgentConsole = dynamic(() => import('@/components/dashboard/AgentConsole').then(mod => mod.AgentConsole), { ssr: false })
+const TradeFeed = dynamic(() => import('@/components/dashboard/TradeFeed').then(mod => mod.TradeFeed), { ssr: false })
+const WalletNetworkGraph = dynamic(() => import('@/components/dashboard/WalletNetworkGraph').then(mod => mod.WalletNetworkGraph), { ssr: false })
+const WalletActivityHeatmap = dynamic(() => import('@/components/dashboard/WalletActivityHeatmap').then(mod => mod.WalletActivityHeatmap), { ssr: false })
+const PnLHeatmap = dynamic(() => import('@/components/dashboard/PnLHeatmap').then(mod => mod.PnLHeatmap), { ssr: false })
+const SentimentTimeline = dynamic(() => import('@/components/dashboard/SentimentTimeline').then(mod => mod.SentimentTimeline), { ssr: false })
+const WalletComparisonTool = dynamic(() => import('@/components/dashboard/WalletComparisonTool').then(mod => mod.WalletComparisonTool), { ssr: false })
+const MarketSentimentGauge = dynamic(() => import('@/components/dashboard/MarketSentimentGauge').then(mod => mod.MarketSentimentGauge), { ssr: false })
+const CorrelationMatrix = dynamic(() => import('@/components/dashboard/CorrelationMatrix').then(mod => mod.CorrelationMatrix), { ssr: false })
+const TradeClustering = dynamic(() => import('@/components/dashboard/TradeClustering').then(mod => mod.TradeClustering), { ssr: false })
+const PerformanceAttribution = dynamic(() => import('@/components/dashboard/PerformanceAttribution').then(mod => mod.PerformanceAttribution), { ssr: false })
+const AgentPerformanceTimeline = dynamic(() => import('@/components/dashboard/AgentPerformanceTimeline').then(mod => mod.AgentPerformanceTimeline), { ssr: false })
+const WalletConnectPanel = dynamic(() => import('@/components/dashboard/WalletConnectPanel').then(mod => mod.WalletConnectPanel), { ssr: false })
+const MarketScanner = dynamic(() => import('@/components/dashboard/MarketScanner').then(mod => mod.MarketScanner), { ssr: false })
+const MarketDepth = dynamic(() => import('@/components/dashboard/MarketDepth').then(mod => mod.MarketDepth), { ssr: false })
+const KellySizer = dynamic(() => import('@/components/dashboard/KellySizer').then(mod => mod.KellySizer), { ssr: false })
+const OrderBookDepth = dynamic(() => import('@/components/dashboard/OrderBookDepth').then(mod => mod.OrderBookDepth), { ssr: false })
+const StrategyBacktest = dynamic(() => import('@/components/dashboard/StrategyBacktest').then(mod => mod.StrategyBacktest), { ssr: false })
+const PortfolioAllocation = dynamic(() => import('@/components/dashboard/PortfolioAllocation').then(mod => mod.PortfolioAllocation), { ssr: false })
+const TradeExport = dynamic(() => import('@/components/dashboard/TradeExport').then(mod => mod.TradeExport), { ssr: false })
+const TradeHistoryLog = dynamic(() => import('@/components/dashboard/TradeHistoryLog').then(mod => mod.TradeHistoryLog), { ssr: false })
+const DeploymentTimeline = dynamic(() => import('@/components/dashboard/DeploymentTimeline').then(mod => mod.DeploymentTimeline), { ssr: false })
+const RiskAnalysis = dynamic(() => import('@/components/dashboard/RiskAnalysis').then(mod => mod.RiskAnalysis), { ssr: false })
+const AgentStrategyPanel = dynamic(() => import('@/components/dashboard/AgentStrategyPanel').then(mod => mod.AgentStrategyPanel), { ssr: false })
+const StrategyComparison = dynamic(() => import('@/components/dashboard/StrategyComparison').then(mod => mod.StrategyComparison), { ssr: false })
+const DashboardSettings = dynamic(() => import('@/components/dashboard/DashboardSettings').then(mod => mod.DashboardSettings), { ssr: false })
+const MatrixRain = dynamic(() => import('@/components/dashboard/MatrixRain').then(mod => mod.MatrixRain), { ssr: false })
+const QuickActionsToolbar = dynamic(() => import('@/components/dashboard/QuickActionsToolbar').then(mod => mod.QuickActionsToolbar), { ssr: false })
+const AlertCenter = dynamic(() => import('@/components/dashboard/AlertCenter').then(mod => mod.AlertCenter), { ssr: false })
+const LivePriceTicker = dynamic(() => import('@/components/dashboard/LivePriceTicker').then(mod => mod.LivePriceTicker), { ssr: false })
 
 type TabKey = 'overview' | 'analytics' | 'trading' | 'risk'
 
@@ -233,31 +237,20 @@ function SystemStatus() {
 }
 
 export default function DashboardPage() {
-  const liveData = useLiveData()
+  const [activeTab, setActiveTab] = useState<TabKey>('overview')
 
-  const wsConnected = useDashboardStore((s) => s.wsConnected)
-
-  const { settings } = useDashboardSettings()
-  const gridGap = settings.compactMode ? 'gap-3' : 'gap-5'
-  const sectionMb = settings.compactMode ? 'mb-3' : 'mb-5'
-
-  const [activeTab, setActiveTab] = useState<TabKey>(() => {
-    if (typeof window === 'undefined') return 'overview'
-    try {
-      const saved = localStorage.getItem('polyagent-active-tab')
-      if (saved && ['overview', 'analytics', 'trading', 'risk'].includes(saved)) {
-        return saved as TabKey
-      }
-    } catch {}
-    return 'overview'
-  })
-
-  // Save tab to localStorage when it changes
+  // Save tab to localStorage when it changes (optional but helps user return to their preference)
   useEffect(() => {
     try {
       localStorage.setItem('polyagent-active-tab', activeTab)
     } catch {}
   }, [activeTab])
+
+  const liveData = useLiveData()
+  const { settings } = useDashboardSettings()
+  const wsConnected = useDashboardStore((s) => s.wsConnected)
+  const gridGap = settings.compactMode ? 'gap-3' : 'gap-5'
+  const sectionMb = settings.compactMode ? 'mb-3' : 'mb-5'
 
   const { data: agentData } = useQuery<{
     state: AgentState
@@ -628,7 +621,7 @@ export default function DashboardPage() {
         <div className="mx-auto flex max-w-[1800px] items-center justify-between text-[10px] text-[#64748b]">
           <div className="flex items-center gap-3">
             <span className="font-mono font-medium text-[#00ff41]/60">
-              POLYAGENT v7.2
+              POLYAGENT v8.3
             </span>
             <span className="hidden sm:inline text-[#1e293b]">·</span>
             <span className="hidden sm:inline">

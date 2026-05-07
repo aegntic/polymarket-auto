@@ -52,9 +52,25 @@ async function fetchWallets() {
   }
 }
 
+// Fetch recent trades
+async function fetchRecentTrades(): Promise<Trade[]> {
+  try {
+    const res = await fetch('/api/trades?limit=50')
+    if (!res.ok) {
+      console.error('[useLiveData] Trades fetch failed:', res.status, res.statusText)
+      return []
+    }
+    const data = await res.json()
+    return Array.isArray(data) ? data : []
+  } catch (err) {
+    console.error('[useLiveData] Trades fetch error:', err)
+    return []
+  }
+}
+
 export function useLiveData() {
   const queryClient = useQueryClient()
-  const { updateMarket, addLiveTrade, addAgentDecision } = useDashboardStore()
+  const { batchUpdateMarkets, setAgentDecisions, setLiveTrades } = useDashboardStore()
   const initializedRef = useRef(false)
 
   // Poll markets every 30s
@@ -64,6 +80,15 @@ export function useLiveData() {
     refetchInterval: 30_000,
     staleTime: 15_000,
     retry: 2,
+  })
+
+  // Poll trades every 20s
+  const tradesQuery = useQuery({
+    queryKey: ['recent-trades'],
+    queryFn: fetchRecentTrades,
+    refetchInterval: 20_000,
+    staleTime: 10_000,
+    retry: 1,
   })
 
   // Poll edge scores every 90s
@@ -84,23 +109,27 @@ export function useLiveData() {
     retry: 1,
   })
 
-  // Sync market data to store
+  // Sync market data to store (batched)
   useEffect(() => {
-    if (marketsQuery.data) {
-      for (const market of marketsQuery.data) {
-        updateMarket(market)
-      }
+    if (marketsQuery.data && marketsQuery.data.length > 0) {
+      batchUpdateMarkets(marketsQuery.data)
     }
-  }, [marketsQuery.data, updateMarket])
+  }, [marketsQuery.data, batchUpdateMarkets])
 
-  // Sync edge scores as agent decisions
+  // Sync trades to store (batched)
+  useEffect(() => {
+    if (tradesQuery.data && tradesQuery.data.length > 0) {
+      setLiveTrades(tradesQuery.data)
+    }
+  }, [tradesQuery.data, setLiveTrades])
+
+  // Sync edge scores as agent decisions (batched)
   useEffect(() => {
     if (!edgeScoresQuery.data || edgeScoresQuery.data.length === 0) return
 
-    for (const score of edgeScoresQuery.data) {
-      if (score.recommendation === 'SKIP' || score.recommendation === 'HOLD') continue
-
-      addAgentDecision({
+    const decisions = edgeScoresQuery.data
+      .filter((score: any) => score.recommendation !== 'SKIP' && score.recommendation !== 'HOLD')
+      .map((score: any) => ({
         id: `edge-${score.marketId}`,
         type: 'analyze',
         reasoning: score.reasoning,
@@ -113,9 +142,10 @@ export function useLiveData() {
         outcome: null,
         pnl: null,
         createdAt: score.scoredAt,
-      })
-    }
-  }, [edgeScoresQuery.data, addAgentDecision])
+      }))
+
+    setAgentDecisions(decisions)
+  }, [edgeScoresQuery.data, setAgentDecisions])
 
   return {
     markets: marketsQuery.data ?? [],

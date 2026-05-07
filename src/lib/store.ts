@@ -144,8 +144,11 @@ interface DashboardStore {
 
   // Actions
   addLiveTrade: (trade: Trade) => void
+  setLiveTrades: (trades: Trade[]) => void
   addAgentDecision: (decision: AgentDecision) => void
+  setAgentDecisions: (decisions: AgentDecision[]) => void
   updateMarket: (market: Market) => void
+  batchUpdateMarkets: (markets: Market[]) => void
   addNewsAlert: (news: NewsEvent) => void
   setWsConnected: (connected: boolean) => void
   setSimulationActive: (active: boolean) => void
@@ -190,10 +193,16 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
       liveTrades: [trade, ...state.liveTrades].slice(0, 100),
     })),
 
+  setLiveTrades: (trades) =>
+    set({ liveTrades: trades.slice(0, 100) }),
+
   addAgentDecision: (decision) =>
     set((state) => ({
       agentDecisions: [decision, ...state.agentDecisions].slice(0, 50),
     })),
+
+  setAgentDecisions: (decisions) =>
+    set({ agentDecisions: decisions.slice(0, 50) }),
 
   updateMarket: (market) =>
     set((state) => {
@@ -204,6 +213,20 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
         return { marketUpdates: updated }
       }
       return { marketUpdates: [market, ...state.marketUpdates].slice(0, 50) }
+    }),
+
+  batchUpdateMarkets: (markets) =>
+    set((state) => {
+      const current = [...state.marketUpdates]
+      for (const m of markets) {
+        const idx = current.findIndex((curr) => curr.id === m.id)
+        if (idx >= 0) {
+          current[idx] = m
+        } else {
+          current.unshift(m)
+        }
+      }
+      return { marketUpdates: current.slice(0, 50) }
     }),
 
   addNewsAlert: (news) =>

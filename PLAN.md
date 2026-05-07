@@ -35,11 +35,12 @@
 - [x] Proper logging (structured logger in src/lib/logger.ts)
 - [x] CORS config for production domain (in middleware)
 
-## Final Dashboard State (v8.2)
+## Final Dashboard State (v8.3)
 - 36 components functional
-- Real data polling via useLiveData
+- Real data polling via useLiveData (highly optimized)
 - Cyberpunk dark theme with high-contrast text (#64748b)
-- Clamped risk metrics for stability
+- Dynamic chart scaling to real capital
+- Batched store updates for performance
 - Structured logging for observability
 - API rate limiting for security
 

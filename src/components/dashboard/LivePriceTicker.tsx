@@ -47,94 +47,54 @@ function TickerEntry({ item, flash }: { item: TickerItem; flash: boolean }) {
 }
 
 export function LivePriceTicker() {
-  const { data: markets, isLoading } = useQuery<Market[]>({
-    queryKey: ['markets'],
-    queryFn: () => fetch('/api/markets').then((r) => r.json()),
-    refetchInterval: 30000,
-  })
-
-  const liveMarkets = useDashboardStore((s) => s.marketUpdates)
-
-  // Merge live market updates with API data
-  const mergedMarkets = useMemo(() => {
-    if (!markets) return liveMarkets
-    const liveMap = new Map(liveMarkets.map((m) => [m.id, m]))
-    return markets.map((m) => liveMap.get(m.id) ?? m)
-  }, [markets, liveMarkets])
-
-  // Initialize deltas from market data
-  const initialDeltas = useMemo(() => {
-    const d: Record<string, number> = {}
-    mergedMarkets.forEach((m) => {
-      d[m.id] = 0
-    })
-    return d
-  }, [mergedMarkets])
-
-  // Simulated price deltas – changes every few seconds
+  const markets = useDashboardStore((s) => s.marketUpdates)
   const [deltas, setDeltas] = useState<Record<string, number>>({})
   const [flashKeys, setFlashKeys] = useState<Record<string, boolean>>({})
 
-  // Sync initial deltas when markets change
+  // Simulated price deltas – changes every 5 seconds
   useEffect(() => {
-    setDeltas(initialDeltas)
-  }, [initialDeltas])
-
-  useEffect(() => {
-    if (mergedMarkets.length === 0) return
+    if (markets.length === 0) return
 
     const interval = setInterval(() => {
-      // Randomly pick ~40% of markets to update
       const newDeltas: Record<string, number> = {}
       const newFlashes: Record<string, boolean> = {}
-      mergedMarkets.forEach((m) => {
-        if (Math.random() < 0.4) {
-          const delta = (Math.random() - 0.5) * 2.0 // ±1.0 cent
-          newDeltas[m.id] = Math.round(delta * 10) / 10
-          newFlashes[m.id] = true
-        } else {
-          newDeltas[m.id] = 0
-          newFlashes[m.id] = false
-        }
-      })
+      
+      // Only update a small subset for performance
+      const updateCount = Math.floor(markets.length * 0.3)
+      for (let i = 0; i < updateCount; i++) {
+        const idx = Math.floor(Math.random() * markets.length)
+        const m = markets[idx]
+        const delta = (Math.random() - 0.5) * 1.5
+        newDeltas[m.id] = Math.round(delta * 10) / 10
+        newFlashes[m.id] = true
+      }
+      
       setDeltas(newDeltas)
       setFlashKeys(newFlashes)
 
-      // Clear flashes after 800ms
-      setTimeout(() => {
-        setFlashKeys((prev) => {
-          const cleared = { ...prev }
-          Object.keys(cleared).forEach((k) => (cleared[k] = false))
-          return cleared
-        })
-      }, 800)
-    }, 3000)
+      setTimeout(() => setFlashKeys({}), 1000)
+    }, 5000)
 
     return () => clearInterval(interval)
-  }, [mergedMarkets])
+  }, [markets])
 
-  // Build ticker items
-  const tickerItems: TickerItem[] = useMemo(() => {
-    return mergedMarkets.map((m) => ({
+  const tickerItems = useMemo(() => {
+    return markets.map((m) => ({
       id: m.id,
       title: m.title,
       yesPrice: m.yesPrice,
       delta: deltas[m.id] ?? 0,
     }))
-  }, [mergedMarkets, deltas])
+  }, [markets, deltas])
 
-  // Duplicate 2x for seamless loop
-  const duplicatedItems = useMemo(
-    () => [...tickerItems, ...tickerItems],
-    [tickerItems]
-  )
+  const duplicatedItems = useMemo(() => [...tickerItems, ...tickerItems], [tickerItems])
 
-  if (isLoading || tickerItems.length === 0) {
+  if (markets.length === 0) {
     return (
       <div className="relative hidden h-8 items-center overflow-hidden border-b border-[#1e293b]/60 bg-[#0a0e17]/90 sm:flex">
         <div className="flex w-full items-center justify-center">
-          <span className="animate-pulse font-mono text-[10px] text-[#64748b]">
-            Loading market data…
+          <span className="font-mono text-[10px] text-[#64748b]">
+            Waiting for market data…
           </span>
         </div>
       </div>

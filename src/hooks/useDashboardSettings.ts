@@ -21,7 +21,7 @@ export interface DashboardSettings {
 }
 
 const DEFAULT_SETTINGS: DashboardSettings = {
-  matrixRain: true,
+  matrixRain: false,
   animationSpeed: 1.0,
   cardStyle: 'glass',
   compactMode: false,
