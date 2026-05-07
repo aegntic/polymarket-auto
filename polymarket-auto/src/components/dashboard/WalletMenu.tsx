@@ -35,7 +35,7 @@ export function WalletMenu() {
 
   const { data: usdcBal } = useBalance({
     address,
-    token: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+    token: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
     chainId: polygon.id,
   })
   const { data: maticBal } = useBalance({
@@ -43,7 +43,15 @@ export function WalletMenu() {
     chainId: polygon.id,
   })
 
-  // Auto-switch to Polygon on connect
+  // Sync with store
+  useEffect(() => {
+    if (isConnected && address) {
+      const balance = usdcBal ? parseFloat(usdcBal.formatted) : 0
+      setWalletConnection(address, balance)
+    } else {
+      setWalletConnection(null)
+    }
+  }, [isConnected, address, usdcBal, setWalletConnection])
   useEffect(() => {
     if (isConnected && chainId && chainId !== polygon.id && switchChain) {
       switchChain({ chainId: polygon.id })

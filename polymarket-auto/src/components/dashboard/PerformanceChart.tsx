@@ -18,7 +18,7 @@ import {
   ReferenceDot,
   Label,
 } from 'recharts'
-import type { PerformancePoint } from '@/lib/store'
+import { useDashboardStore, type PerformancePoint } from '@/lib/store'
 
 type TimeRange = '1H' | '4H' | '8H' | 'ALL'
 
@@ -49,26 +49,50 @@ function filterByRange(data: PerformancePoint[], range: TimeRange): PerformanceP
 export function PerformanceChart() {
   const [timeRange, setTimeRange] = useState<TimeRange>('ALL')
 
+  const walletBalance = useDashboardStore((s) => s.walletBalance)
+  const liveCapital = useDashboardStore((s) => s.liveCapital)
+  const actualCapital = walletBalance || liveCapital || 0
+
   const { data: performance, isLoading, error } = useQuery<PerformancePoint[]>({
     queryKey: ['performance'],
     queryFn: () => fetch('/api/performance').then((r) => r.json()),
     refetchInterval: 60000,
   })
 
-  const currentCapital = performance?.[performance.length - 1]?.capital ?? 0
-  const startCapital = performance?.[0]?.capital ?? 25
+  const filteredData = useMemo(() => {
+    if (!Array.isArray(performance) || performance.length === 0) return []
+    const rangeData = filterByRange(performance, timeRange)
+    
+    if (!Array.isArray(rangeData) || rangeData.length === 0) return []
+    
+    // Scale data to match actual current capital
+    const lastPoint = rangeData[rangeData.length - 1]?.capital
+    if (actualCapital > 0 && lastPoint && lastPoint > 0) {
+      const ratio = actualCapital / lastPoint
+      const scaled = rangeData.map(p => ({
+        ...p,
+        capital: p.capital * ratio,
+      }))
+      return computeMA(scaled)
+    }
+    
+    return computeMA(rangeData)
+  }, [performance, timeRange, actualCapital])
+
+  const currentCapital = filteredData.length > 0 
+    ? filteredData[filteredData.length - 1].capital 
+    : (actualCapital || 0)
+
+  const startCapital = filteredData.length > 0 
+    ? filteredData[0].capital 
+    : 25
+
   const pnlPercent =
     startCapital > 0
       ? (((currentCapital - startCapital) / startCapital) * 100).toFixed(0)
       : '0'
   const returnMultiple =
     startCapital > 0 ? (currentCapital / startCapital).toFixed(1) : '0'
-
-  const filteredData = useMemo(() => {
-    if (!performance) return []
-    const rangeData = filterByRange(performance, timeRange)
-    return computeMA(rangeData)
-  }, [performance, timeRange])
 
   const ranges: TimeRange[] = ['1H', '4H', '8H', 'ALL']
 

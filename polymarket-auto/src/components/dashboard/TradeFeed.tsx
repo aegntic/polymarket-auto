@@ -44,9 +44,15 @@ export function TradeFeed() {
   const prevCountRef = useRef(0)
   const [newTradeIds, setNewTradeIds] = useState<Set<string>>(new Set())
 
+  // Current market selection (if any) - could be added to store later
+  const selectedMarketId = null 
+
   const { data: apiTrades, isLoading, error } = useQuery<Trade[]>({
-    queryKey: ['trades'],
-    queryFn: () => fetch('/api/trades').then((r) => r.json()),
+    queryKey: ['trades', selectedMarketId],
+    queryFn: () => {
+      const url = selectedMarketId ? `/api/trades?marketId=${selectedMarketId}` : '/api/trades'
+      return fetch(url).then((r) => r.json())
+    },
     refetchInterval: 15000,
   })
 

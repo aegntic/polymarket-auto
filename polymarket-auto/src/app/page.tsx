@@ -278,7 +278,7 @@ export default function DashboardPage() {
   const { address: wagmiAddress, isConnected: wagmiConnected } = useAccount()
   const { data: usdcBalance } = useBalance({
     address: wagmiAddress,
-    token: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+    token: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
     chainId: 137, // force Polygon
   })
 

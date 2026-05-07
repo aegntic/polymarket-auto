@@ -134,7 +134,7 @@ export function RiskAnalysis() {
   const agent = agentData?.state
 
   const metrics = useMemo(() => {
-    if (!agent || !performance) return null
+    if (!agent || !Array.isArray(performance) || performance.length < 2) return null
 
     const maxDrawdown = agent.maxDrawdown ?? 0
 
@@ -144,8 +144,11 @@ export function RiskAnalysis() {
     // Compute Sortino ratio from performance data
     const returns: number[] = []
     for (let i = 1; i < performance.length; i++) {
-      const ret = (performance[i].capital - performance[i - 1].capital) / performance[i - 1].capital
-      returns.push(ret)
+      const prevCap = performance[i - 1].capital
+      if (prevCap && prevCap > 0) {
+        const ret = (performance[i].capital - prevCap) / prevCap
+        returns.push(ret)
+      }
     }
     const avgReturn = returns.length > 0 ? returns.reduce((s, r) => s + r, 0) / returns.length : 0
     const downsideReturns = returns.filter((r) => r < 0)
