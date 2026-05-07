@@ -11,6 +11,7 @@ import {
   ReferenceLine,
   ReferenceDot,
 } from 'recharts'
+import { useDashboardStore } from '@/lib/store'
 
 type Period = '7D' | '30D' | '90D' | 'ALL'
 
@@ -175,10 +176,25 @@ function filterByPeriod(data: TimelinePoint[], period: Period): TimelinePoint[] 
 export function PortfolioTimeline() {
   const [period, setPeriod] = useState<Period>('90D')
 
-  const filteredData = useMemo(() => filterByPeriod(DATA, period), [period])
+  const walletBalance = useDashboardStore((s) => s.walletBalance)
+  const liveCapital = useDashboardStore((s) => s.liveCapital)
+  const currentValueStore = walletBalance || liveCapital || 4237.5
+  
+  const filteredData = useMemo(() => {
+    const raw = filterByPeriod(DATA, period)
+    if (raw.length === 0) return []
+    const lastRaw = raw[raw.length - 1].value
+    const ratio = currentValueStore / (lastRaw || 1)
+    return raw.map(p => ({
+      ...p,
+      value: p.value * ratio,
+      gainValue: p.gainValue ? p.gainValue * ratio : null,
+      lossValue: p.lossValue ? p.lossValue * ratio : null
+    }))
+  }, [period, currentValueStore])
 
-  const currentValue = DATA[DATA.length - 1].value
-  const peakValue = Math.max(...DATA.map((d) => d.value))
+  const currentValue = filteredData.length > 0 ? filteredData[filteredData.length - 1].value : currentValueStore
+  const peakValue = filteredData.length > 0 ? Math.max(...filteredData.map((d) => d.value)) : currentValueStore
   const peakDay = DATA.find((d) => d.value === peakValue)?.day ?? 0
 
   // Compute max drawdown

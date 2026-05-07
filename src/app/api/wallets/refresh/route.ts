@@ -1,8 +1,11 @@
 // Fetch real Polymarket trades and compute wallet performance (past 90 days)
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { execPromise } from '@/lib/polymarket-api'
 import { logger } from '@/lib/logger'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execPromise = promisify(exec)
 
 // DNS override for Polymarket API
 const DNS_OVERRIDES: Record<string, string> = {

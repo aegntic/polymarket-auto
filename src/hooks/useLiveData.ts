@@ -6,20 +6,32 @@ import { useDashboardStore, type Market, type Trade } from '@/lib/store'
 
 // Fetch live market data from our API
 async function fetchMarkets(): Promise<Market[]> {
-  const res = await fetch('/api/markets?limit=50&active=true')
-  if (!res.ok) return []
-  const data = await res.json()
-  return Array.isArray(data) ? data : []
+  try {
+    const res = await fetch('/api/markets?limit=50&active=true')
+    if (!res.ok) {
+      console.error('[useLiveData] Markets fetch failed:', res.status, res.statusText)
+      return []
+    }
+    const data = await res.json()
+    return Array.isArray(data) ? data : []
+  } catch (err) {
+    console.error('[useLiveData] Markets fetch error:', err)
+    return []
+  }
 }
 
 // Fetch edge scores
 async function fetchEdgeScores() {
   try {
     const res = await fetch('/api/edge-score?limit=10&minEdge=300')
-    if (!res.ok) return []
+    if (!res.ok) {
+      console.error('[useLiveData] Edge scores fetch failed:', res.status, res.statusText)
+      return []
+    }
     const data = await res.json()
     return data.scores || []
-  } catch {
+  } catch (err) {
+    console.error('[useLiveData] Edge scores fetch error:', err)
     return []
   }
 }
@@ -28,10 +40,14 @@ async function fetchEdgeScores() {
 async function fetchWallets() {
   try {
     const res = await fetch('/api/wallets')
-    if (!res.ok) return []
+    if (!res.ok) {
+      console.error('[useLiveData] Wallets fetch failed:', res.status, res.statusText)
+      return []
+    }
     const data = await res.json()
     return Array.isArray(data) ? data : []
-  } catch {
+  } catch (err) {
+    console.error('[useLiveData] Wallets fetch error:', err)
     return []
   }
 }
