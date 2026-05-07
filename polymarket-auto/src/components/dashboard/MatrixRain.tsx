@@ -3,11 +3,11 @@
 import { useEffect, useRef } from 'react'
 
 const CHARS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789$%+=<>{}[]|/\\*#@&'
-const FONT_SIZE = 14
-const FPS = 15
+const FONT_SIZE = 16 // Increased size = fewer columns
+const FPS = 12 // Reduced FPS
 const FRAME_INTERVAL = 1000 / FPS
 
-export function MatrixRain({ enabled = true }: { enabled?: boolean }) {
+export function MatrixRain({ enabled = false }: { enabled?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<number>(0)
 
@@ -17,7 +17,7 @@ export function MatrixRain({ enabled = true }: { enabled?: boolean }) {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { alpha: false }) // Disable alpha for better perf
     if (!ctx) return
 
     let width = window.innerWidth
@@ -25,7 +25,8 @@ export function MatrixRain({ enabled = true }: { enabled?: boolean }) {
     canvas.width = width
     canvas.height = height
 
-    const columns = Math.floor(width / FONT_SIZE)
+    // Reduced column density (every 2nd column)
+    const columns = Math.floor(width / (FONT_SIZE * 1.5))
     const drops: number[] = Array.from({ length: columns }, () =>
       Math.random() * -100
     )
@@ -46,31 +47,25 @@ export function MatrixRain({ enabled = true }: { enabled?: boolean }) {
       if (timestamp - lastFrame < FRAME_INTERVAL) return
       lastFrame = timestamp
 
-      ctx.fillStyle = 'rgba(10, 14, 23, 0.12)'
+      // Semi-transparent background for trail effect (using solid color with low opacity)
+      ctx.fillStyle = 'rgba(10, 14, 23, 0.15)'
       ctx.fillRect(0, 0, width, height)
 
       ctx.font = `${FONT_SIZE}px monospace`
+      ctx.fillStyle = '#003300' // Dim green for characters
 
       for (let i = 0; i < columns; i++) {
         const char = CHARS[Math.floor(Math.random() * CHARS.length)]
-        const x = i * FONT_SIZE
+        const x = i * FONT_SIZE * 1.5
         const y = drops[i] * FONT_SIZE
 
-        // Head character (brighter)
-        ctx.fillStyle = 'rgba(0, 255, 65, 0.07)'
+        // Render char
         ctx.fillText(char, x, y)
 
-        // Trail character (dimmer)
-        if (drops[i] > 1) {
-          const prevChar = CHARS[Math.floor(Math.random() * CHARS.length)]
-          ctx.fillStyle = 'rgba(0, 255, 65, 0.03)'
-          ctx.fillText(prevChar, x, y - FONT_SIZE)
-        }
-
-        if (y > height && Math.random() > 0.975) {
+        if (y > height && Math.random() > 0.98) {
           drops[i] = 0
         }
-        drops[i] += 0.5
+        drops[i] += 0.4
       }
     }
 

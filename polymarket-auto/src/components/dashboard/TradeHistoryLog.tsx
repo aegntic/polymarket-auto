@@ -112,36 +112,10 @@ export function TradeHistoryLog() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  // Data
-  const { data: apiTrades, isLoading, error } = useQuery<Trade[]>({
-    queryKey: ['trades'],
-    queryFn: () => fetch('/api/trades').then((r) => r.json()),
-    refetchInterval: 15000,
-  })
+  const allTrades = useDashboardStore((s) => s.liveTrades)
 
-  const liveTrades = useDashboardStore((s) => s.liveTrades)
-
-  // Merge and deduplicate
-  const allTrades = useMemo(() => {
-    const seen = new Set<string>()
-    const result: Trade[] = []
-    for (const t of liveTrades) {
-      if (!seen.has(t.id)) {
-        seen.add(t.id)
-        result.push(t)
-      }
-    }
-    for (const t of apiTrades ?? []) {
-      if (!seen.has(t.id)) {
-        seen.add(t.id)
-        result.push(t)
-      }
-    }
-    return result
-  }, [liveTrades, apiTrades])
-
-  // Filter
-  const filtered = useMemo(() => {
+  // Derived filtered data
+  const filteredTrades = useMemo(() => {
     let result = allTrades
 
     // Date range
@@ -282,22 +256,6 @@ export function TradeHistoryLog() {
     )
   }
 
-  if (error) {
-    return (
-      <Card className="card-accent-green rounded-xl border border-[#1e293b]/60 bg-[#0f1724]/70 backdrop-blur-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-[#94a3b8]">
-            <ScrollText className="h-4 w-4 text-[#00ff41]" />
-            <span className="card-title-cyber">TRADE HISTORY LOG</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-xs text-red-400">Failed to load trade data</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
     <Card className="card-accent-green rounded-xl border border-[#1e293b]/60 bg-[#0f1724]/70 backdrop-blur-sm">
       <CardHeader className="pb-2">
@@ -311,7 +269,7 @@ export function TradeHistoryLog() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {isLoading ? (
+        {allTrades.length === 0 ? (
           <div className="space-y-2">
             <Skeleton className="h-8 w-full bg-[#1e293b]/50" />
             <Skeleton className="h-6 w-full bg-[#1e293b]/50" />

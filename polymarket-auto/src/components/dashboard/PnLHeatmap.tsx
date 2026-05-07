@@ -62,32 +62,7 @@ function getCellTextColor(pnl: number): string {
 }
 
 export function PnLHeatmap() {
-  const { data: apiTrades, isLoading, error } = useQuery<Trade[]>({
-    queryKey: ['trades'],
-    queryFn: () => fetch('/api/trades').then((r) => r.json()),
-    refetchInterval: 30000,
-  })
-
-  const liveTrades = useDashboardStore((s) => s.liveTrades)
-
-  // Merge live + API trades, deduplicate
-  const allTrades = useMemo(() => {
-    const seen = new Set<string>()
-    const result: Trade[] = []
-    for (const t of liveTrades) {
-      if (!seen.has(t.id)) {
-        seen.add(t.id)
-        result.push(t)
-      }
-    }
-    for (const t of apiTrades ?? []) {
-      if (!seen.has(t.id)) {
-        seen.add(t.id)
-        result.push(t)
-      }
-    }
-    return result
-  }, [liveTrades, apiTrades])
+  const allTrades = useDashboardStore((s) => s.liveTrades)
 
   // Build heatmap data
   const { heatmap, maxAbsPnl, totalPnl, totalTrades, profitTrades, lossTrades } = useMemo(() => {
@@ -166,7 +141,7 @@ export function PnLHeatmap() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {isLoading ? (
+        {allTrades.length === 0 ? (
           <div className="space-y-2">
             {Array.from({ length: 7 }).map((_, i) => (
               <Skeleton key={i} className="h-10 w-full bg-[#1e293b]/50" />

@@ -44,38 +44,7 @@ export function TradeFeed() {
   const prevCountRef = useRef(0)
   const [newTradeIds, setNewTradeIds] = useState<Set<string>>(new Set())
 
-  // Current market selection (if any) - could be added to store later
-  const selectedMarketId = null 
-
-  const { data: apiTrades, isLoading, error } = useQuery<Trade[]>({
-    queryKey: ['trades', selectedMarketId],
-    queryFn: () => {
-      const url = selectedMarketId ? `/api/trades?marketId=${selectedMarketId}` : '/api/trades'
-      return fetch(url).then((r) => r.json())
-    },
-    refetchInterval: 15000,
-  })
-
-  const liveTrades = useDashboardStore((s) => s.liveTrades)
-
-  // Merge: live trades first, then API data, deduplicate
-  const allTrades = useMemo(() => {
-    const seen = new Set<string>()
-    const result: Trade[] = []
-    for (const t of liveTrades) {
-      if (!seen.has(t.id)) {
-        seen.add(t.id)
-        result.push(t)
-      }
-    }
-    for (const t of (Array.isArray(apiTrades) ? apiTrades : [])) {
-      if (!seen.has(t.id)) {
-        seen.add(t.id)
-        result.push(t)
-      }
-    }
-    return result
-  }, [liveTrades, apiTrades])
+  const allTrades = useDashboardStore((s) => s.liveTrades)
 
   // Track new trades for animation
   useEffect(() => {
@@ -160,9 +129,7 @@ export function TradeFeed() {
       </CardHeader>
       <CardContent className="px-2">
         <ScrollArea className="h-[350px]">
-          {error ? (
-            <p className="px-4 text-xs text-red-400">Failed to load trades</p>
-          ) : isLoading ? (
+          {allTrades.length === 0 ? (
             <div className="space-y-2 px-4">
               {Array.from({ length: 8 }).map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full bg-[#1e293b]/50" />
