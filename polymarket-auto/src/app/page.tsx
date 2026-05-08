@@ -26,7 +26,6 @@ import {
   Brain,
   Radio,
   Shield,
-  Eye,
   Layers,
   Gem,
   LayoutDashboard,
@@ -66,7 +65,6 @@ const RiskAnalysis = dynamic(() => import('@/components/dashboard/RiskAnalysis')
 const AgentStrategyPanel = dynamic(() => import('@/components/dashboard/AgentStrategyPanel').then(mod => mod.AgentStrategyPanel), { ssr: false })
 const StrategyComparison = dynamic(() => import('@/components/dashboard/StrategyComparison').then(mod => mod.StrategyComparison), { ssr: false })
 const DashboardSettings = dynamic(() => import('@/components/dashboard/DashboardSettings').then(mod => mod.DashboardSettings), { ssr: false })
-const MatrixRain = dynamic(() => import('@/components/dashboard/MatrixRain').then(mod => mod.MatrixRain), { ssr: false })
 const QuickActionsToolbar = dynamic(() => import('@/components/dashboard/QuickActionsToolbar').then(mod => mod.QuickActionsToolbar), { ssr: false })
 const AlertCenter = dynamic(() => import('@/components/dashboard/AlertCenter').then(mod => mod.AlertCenter), { ssr: false })
 const LivePriceTicker = dynamic(() => import('@/components/dashboard/LivePriceTicker').then(mod => mod.LivePriceTicker), { ssr: false })
@@ -274,13 +272,11 @@ export default function DashboardPage() {
 
   return (
     <div
-      className="flex min-h-screen flex-col bg-[#0a0e17] text-[#e2e8f0] scanline-overlay grid-pattern-overlay"
+      className="flex min-h-screen flex-col bg-[#0a0e17] text-[#e2e8f0]"
       style={{ '--anim-speed': settings.animationSpeed } as React.CSSProperties}
       data-card-style={settings.cardStyle}
     >
       <ToastNotificationSystem />
-      {/* Matrix Rain Background */}
-      <MatrixRain enabled={settings.matrixRain} />
 
       {/* ─── HEADER ─── */}
       <header className="sticky top-0 z-50 border-b border-[#1e293b]/60 bg-[#0a0e17]/90 px-4 py-2.5 backdrop-blur-xl [--header-h:80px]">
@@ -411,7 +407,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
-      <div className="header-gradient-line" />
 
       {/* ─── LIVE PRICE TICKER ─── */}
       <LivePriceTicker />
@@ -450,9 +445,7 @@ export default function DashboardPage() {
       >
         <div className="mx-auto max-w-[1800px]">
           {/* Getting Started - shows when no wallet connected */}
-          {!walletAddress && (
-            <GettingStarted onDismiss={() => {}} />
-          )}
+          <GettingStarted />
           <AnimatePresence mode="wait">
             {/* Overview Tab */}
             {activeTab === 'overview' && (
@@ -468,12 +461,10 @@ export default function DashboardPage() {
                 <div className={sectionMb}>
                   <PerformanceChart />
                 </div>
-                <div className="glow-divider" />
                 {/* PortfolioTimeline - full width */}
                 <div className={sectionMb}>
                   <PortfolioTimeline />
                 </div>
-                <div className="glow-divider" />
                 <div className={`grid grid-cols-1 ${gridGap} lg:grid-cols-2`}>
                   <div className={`flex flex-col ${gridGap}`}>
                     <WalletLeaderboard />
@@ -591,7 +582,7 @@ export default function DashboardPage() {
       <QuickActionsToolbar />
 
       {/* ─── FOOTER ─── */}
-      <footer className="footer-glow-line relative z-10 mt-auto border-t border-[#1e293b]/60 bg-[#0a0e17]/95 px-4 pb-20 pt-2.5 backdrop-blur-xl">
+      <footer className="relative z-10 mt-auto border-t border-[#1e293b]/60 bg-[#0a0e17]/95 px-4 pb-20 pt-2.5 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1800px] items-center justify-between text-[10px] text-[#64748b]">
           <div className="flex items-center gap-3">
             <span className="font-mono font-medium text-[#00ff41]/60">
@@ -599,29 +590,20 @@ export default function DashboardPage() {
             </span>
             <span className="hidden sm:inline text-[#1e293b]">·</span>
             <span className="hidden sm:inline">
-              35 Components · Toast System · {new Date().getFullYear()}
-            </span>
-            <span className="hidden lg:inline text-[#1e293b]">·</span>
-            <span className="hidden lg:inline">
-              Tabbed Nav · Risk & Strategy · Analytics
+              Autonomous Polymarket Trading · {new Date().getFullYear()}
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden text-center md:block">
-              <Eye className="mr-1 inline-block h-3 w-3 text-[#00ff41]/50" />
-              10,000 wallets scanned · 7 edge traders identified ·{' '}
-              {totalTrades} trades executed
-            </span>
             <span className="flex items-center gap-1.5 font-mono">
               {wsConnected ? (
                 <>
                   <Wifi className="h-3 w-3 text-[#00ff41]" />
-                  <span className="text-[#00ff41]">WS Live</span>
+                  <span className="text-[#00ff41]">LIVE</span>
                 </>
               ) : (
                 <>
                   <WifiOff className="h-3 w-3 text-[#64748b]" />
-                  <span className="text-[#64748b]">OFF</span>
+                  <span className="text-[#64748b]">OFFLINE</span>
                 </>
               )}
             </span>
