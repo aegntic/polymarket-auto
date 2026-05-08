@@ -1,17 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Wallet,
-  Zap,
-  BarChart3,
-  Brain,
   ArrowRight,
   Check,
   Globe,
   TrendingUp,
   X,
+  Rocket,
 } from 'lucide-react'
 import { useDashboardStore } from '@/lib/store'
 import { useAccount } from 'wagmi'
@@ -22,30 +20,27 @@ const steps = [
   {
     icon: Wallet,
     title: 'Connect Wallet',
-    description: 'Link your Polygon wallet to track balances and enable trading.',
+    description: 'Link your Polygon wallet via MetaMask, Rainbow, or WalletConnect.',
     color: '#00ff41',
+    action: 'Click Connect in the top-right',
   },
   {
     icon: Globe,
-    title: 'Scan Markets',
-    description: 'Agent scans top wallets and Polymarket markets for opportunities.',
+    title: 'Markets Load Automatically',
+    description: '100+ live Polymarket markets appear instantly with real prices.',
     color: '#22d3ee',
-  },
-  {
-    icon: Brain,
-    title: 'AI Analysis',
-    description: 'xAI Grok-4.20 analyzes edge scores and sentiment for trade decisions.',
-    color: '#8247e5',
+    action: 'Browse the Market Scanner tab',
   },
   {
     icon: TrendingUp,
-    title: 'Trade & Monitor',
-    description: 'Execute trades with Kelly criterion sizing and track performance.',
+    title: 'Track Performance',
+    description: 'Your portfolio, P&L, and trade history update in real-time.',
     color: '#f59e0b',
+    action: 'View the Overview dashboard',
   },
 ]
 
-export function GettingStarted() {
+export function GettingStarted({ onDismiss }: { onDismiss: () => void }) {
   const [visible, setVisible] = useState(false)
   const walletAddress = useDashboardStore((s) => s.walletAddress)
   const { isConnected } = useAccount()
@@ -57,23 +52,30 @@ export function GettingStarted() {
     }
   }, [walletAddress])
 
-  const handleDismiss = () => {
+  const handleDismiss = useCallback(() => {
     localStorage.setItem(STORAGE_KEY, '1')
     setVisible(false)
-  }
+    onDismiss()
+  }, [onDismiss])
 
   if (!visible) return null
 
   return (
     <AnimatePresence>
       <motion.div
-        className="relative z-30 mx-auto max-w-3xl p-3 sm:p-5"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
-        transition={{ duration: 0.3 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0e17]/95 p-4 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
       >
-        <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f1724]/95 p-5 shadow-2xl shadow-black/20 sm:p-8 backdrop-blur-xl">
+        <motion.div
+          className="w-full max-w-2xl rounded-2xl border border-[#1e293b]/80 bg-[#0f1724] p-6 shadow-2xl sm:p-8"
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+          transition={{ duration: 0.3 }}
+        >
           {/* Header */}
           <div className="mb-6 flex items-start justify-between">
             <div>
@@ -82,7 +84,6 @@ export function GettingStarted() {
               </h1>
               <p className="mt-1.5 text-sm leading-relaxed text-[#64748b]">
                 Autonomous Polymarket trading with AI-powered edge detection.
-                Get started in 4 steps.
               </p>
             </div>
             <button
@@ -103,54 +104,52 @@ export function GettingStarted() {
           )}
 
           {/* Steps */}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-3">
             {steps.map((step, i) => (
               <motion.div
                 key={step.title}
-                className="group relative overflow-hidden rounded-xl border border-[#1e293b]/60 bg-[#0a0e17]/60 p-4 transition-colors hover:border-[#1e293b]"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.08 }}
+                className="flex items-start gap-3 rounded-xl border border-[#1e293b]/60 bg-[#0a0e17]/60 p-4"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.1 }}
               >
-                {/* Step number */}
                 <div
-                  className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-bl-lg rounded-tr-xl text-[10px] font-bold"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
                   style={{ backgroundColor: `${step.color}15`, color: step.color }}
                 >
                   {i + 1}
                 </div>
-                <div className="flex items-start gap-3">
-                  <div
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-                    style={{ backgroundColor: `${step.color}12` }}
-                  >
-                    <step.icon className="h-4 w-4" style={{ color: step.color }} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-semibold text-[#e2e8f0]">{step.title}</h3>
-                    <p className="mt-0.5 text-xs leading-relaxed text-[#64748b]">
-                      {step.description}
-                    </p>
-                  </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold text-[#e2e8f0]">{step.title}</h3>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[#64748b]">
+                    {step.description}
+                  </p>
+                  <p className="mt-1 text-[10px] font-medium" style={{ color: step.color }}>
+                    {step.action}
+                  </p>
                 </div>
+                <step.icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: `${step.color}60` }} />
               </motion.div>
             ))}
           </div>
 
-          {/* Dismiss */}
-          <div className="mt-5 flex items-center justify-between">
+          {/* CTA */}
+          <div className="mt-6 flex items-center justify-between">
             <p className="text-[11px] text-[#475569]">
-              Connect a wallet to begin scanning markets.
+              {isConnected
+                ? 'You\'re all set! Dismiss to start trading.'
+                : 'Connect a wallet to begin.'}
             </p>
             <button
               onClick={handleDismiss}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-[#64748b] transition-colors hover:bg-[#1e293b]/50 hover:text-[#94a3b8]"
+              className="flex items-center gap-2 rounded-lg bg-[#00ff41]/10 px-4 py-2 text-sm font-bold text-[#00ff41] transition-all hover:bg-[#00ff41]/20"
             >
-              Got it
+              <Rocket className="h-4 w-4" />
+              Start Trading
               <ArrowRight className="h-3 w-3" />
             </button>
           </div>
-        </div>
+        </motion.div>
       </motion.div>
     </AnimatePresence>
   )
