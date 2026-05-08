@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Providers } from "@/components/Providers";
+import { WalletErrorBoundary } from "@/components/WalletErrorBoundary";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,13 +31,23 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="dark">
+      <head>
+        <script
+          type="text/javascript"
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var a=[],b=window.ethereum;if(b&&a.push(b),Object.defineProperty(window,"ethereum",{configurable:!0,enumerable:!0,get:function(){return a.length>0?a[0]:b||void 0},set:function(c){c&&"object"==typeof c&&!a.includes(c)&&a.push(c),b||(b=c)}}),b)window.dispatchEvent(new Event("ethereum#initialized"))})();`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        <Providers>
-          {children}
-          <Toaster />
-        </Providers>
+        <WalletErrorBoundary>
+          <Providers>
+            {children}
+            <Toaster />
+          </Providers>
+        </WalletErrorBoundary>
       </body>
     </html>
   );
