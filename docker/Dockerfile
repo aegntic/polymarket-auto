@@ -20,6 +20,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 HEALTHCHECK --interval=300s --timeout=15s --retries=2 \
     CMD python3 -c "import stealthscan; print('ok')" || exit 1
 
-# Default: run stealthscan once and exit (cron handles scheduling)
-# Override CMD for daemon mode: python3 stealthwatch.py
-CMD ["python3", "stealthscan.py"]
+# Default: run stealthwatch in continuous mode
+# Each scan polls every 15min for new edge signals
+CMD ["python3", "stealthwatch.py"]

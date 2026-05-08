@@ -92,46 +92,14 @@ function AnimatedCounter({
   className?: string
   decimals?: number
 }) {
-  const [display, setDisplay] = useState(value)
-  const prevRef = useRef(value)
-  const rafRef = useRef<number>(0)
-
-  useEffect(() => {
-    const from = prevRef.current
-    const to = value
-    const duration = 600
-    const start = performance.now()
-
-    const step = (now: number) => {
-      const elapsed = now - start
-      const progress = Math.min(elapsed / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      const current = from + (to - from) * eased
-      setDisplay(current)
-      if (progress < 1) {
-        rafRef.current = requestAnimationFrame(step)
-      } else {
-        prevRef.current = to
-      }
-    }
-
-    rafRef.current = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [value])
-
-  const formatted =
-    display >= 1000
-      ? display.toLocaleString('en-US', {
-          minimumFractionDigits: decimals,
-          maximumFractionDigits: decimals,
-        })
-      : display.toFixed(decimals)
+  const formatted = value.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
 
   return (
     <span className={`font-mono ${className}`}>
-      {prefix}
-      {formatted}
-      {suffix}
+      {prefix}{formatted}{suffix}
     </span>
   )
 }
@@ -239,16 +207,21 @@ function SystemStatus() {
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
 
-  // Save tab to localStorage when it changes (optional but helps user return to their preference)
+  // Memoized selectors to prevent whole-page re-renders
+  const walletAddress = useDashboardStore((s) => s.walletAddress)
+  const walletBalance = useDashboardStore((s) => s.walletBalance)
+  const liveCapital = useDashboardStore((s) => s.liveCapital)
+  const setWalletConnection = useDashboardStore((s) => s.setWalletConnection)
+  const wsConnected = useDashboardStore((s) => s.wsConnected)
+
+  // Save tab to localStorage
   useEffect(() => {
-    try {
-      localStorage.setItem('polyagent-active-tab', activeTab)
-    } catch {}
+    localStorage.setItem('polyagent-active-tab', activeTab)
   }, [activeTab])
 
   const liveData = useLiveData()
   const { settings } = useDashboardSettings()
-  const wsConnected = useDashboardStore((s) => s.wsConnected)
+  
   const gridGap = settings.compactMode ? 'gap-3' : 'gap-5'
   const sectionMb = settings.compactMode ? 'mb-3' : 'mb-5'
 
@@ -261,35 +234,33 @@ export default function DashboardPage() {
     refetchInterval: 15000,
   })
 
-  const walletAddress = useDashboardStore((s) => s.walletAddress)
-  const walletBalance = useDashboardStore((s) => s.walletBalance)
-  const liveCapital = useDashboardStore((s) => s.liveCapital)
-  const setWalletConnection = useDashboardStore((s) => s.setWalletConnection)
   const agent = agentData?.state
 
-  // Sync wagmi wallet state to Zustand store (runs at top level, always mounted)
+  // Sync wagmi wallet state (Native USDC)
   const { address: wagmiAddress, isConnected: wagmiConnected } = useAccount()
   const { data: usdcBalance } = useBalance({
     address: wagmiAddress,
     token: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
-    chainId: 137, // force Polygon
+    chainId: 137,
   })
 
   useEffect(() => {
     if (wagmiConnected && wagmiAddress) {
-      const bal = usdcBalance ? parseFloat(usdcBalance.formatted) : 0
-      setWalletConnection(wagmiAddress, bal)
-    } else {
+      // ONLY update if we have a valid balance, or we just want to sync the address
+      if (usdcBalance) {
+        setWalletConnection(wagmiAddress, parseFloat(usdcBalance.formatted))
+      } else if (!walletAddress) {
+        setWalletConnection(wagmiAddress)
+      }
+    } else if (walletAddress) {
       setWalletConnection(null)
     }
-  }, [wagmiConnected, wagmiAddress, usdcBalance, setWalletConnection])
+  }, [wagmiConnected, wagmiAddress, usdcBalance, setWalletConnection, walletAddress])
 
-  // Show "Connect Wallet" when disconnected, real balance when connected
-  const displayCapital = walletAddress
-    ? (walletBalance ?? liveCapital ?? agent?.currentCapital ?? null)
-    : null
-
-  const currentCapital = displayCapital
+  // REAL CAPITAL PRIORITY: Wallet > API > Simulation
+  const currentCapital = walletAddress 
+    ? (walletBalance ?? liveCapital ?? agent?.currentCapital ?? 0)
+    : (agent?.currentCapital ?? 0)
   const pnlPercent =
     currentCapital !== null && agent && agent.capitalBase > 0
       ? (((currentCapital - agent.capitalBase) / agent.capitalBase) * 100).toFixed(0)
@@ -314,7 +285,8 @@ export default function DashboardPage() {
       <MatrixRain enabled={settings.matrixRain} />
 
       {/* ─── HEADER ─── */}
-      <header className="sticky top-0 z-50 border-b border-[#1e293b]/80 bg-[#0a0e17]/95 px-4 py-2.5 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-[#1e293b]/60 bg-[#0a0e17]/90 px-4 py-2.5 backdrop-blur-xl [--header-h:80px]">
+
         <div className="mx-auto flex max-w-[1800px] items-center gap-4">
           {/* Logo */}
           <motion.div
