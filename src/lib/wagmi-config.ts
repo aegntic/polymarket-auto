@@ -10,7 +10,7 @@ export const config = getDefaultConfig({
   projectId,
   chains: [polygon, mainnet],
   transports: {
-    [polygon.id]: http('https://polygon-rpc.com'),
+    [polygon.id]: http('https://polygon-bor-rpc.publicnode.com'),
     [mainnet.id]: http('https://eth.llamarpc.com'),
   },
   ssr: true,
