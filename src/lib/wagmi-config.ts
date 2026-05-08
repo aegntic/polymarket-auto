@@ -3,10 +3,10 @@ import { http } from 'wagmi'
 import { polygon, mainnet } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'b56e18d47c72ab683b10814fe9495694'
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
 
-if (!process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID) {
-  console.warn('[wagmi-config] NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID not set — using localhost testing ID. Create a project at https://dashboard.reown.com for production.')
+if (!projectId) {
+  throw new Error('[wagmi-config] NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is required. Get one at https://dashboard.reown.com')
 }
 
 export const config = getDefaultConfig({
