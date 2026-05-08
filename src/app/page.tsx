@@ -8,6 +8,7 @@ import { useAccount, useBalance } from 'wagmi'
 import { useDashboardStore, type AgentState } from '@/lib/store'
 import { WalletMenu } from '@/components/dashboard/WalletMenu'
 import { ToastNotificationSystem } from '@/components/dashboard/ToastNotificationSystem'
+import { GettingStarted } from '@/components/dashboard/GettingStarted'
 import { useDashboardSettings } from '@/hooks/useDashboardSettings'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -246,13 +247,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (wagmiConnected && wagmiAddress) {
-      // ONLY update if we have a valid balance, or we just want to sync the address
-      if (usdcBalance) {
-        setWalletConnection(wagmiAddress, parseFloat(usdcBalance.formatted))
-      } else if (!walletAddress) {
-        setWalletConnection(wagmiAddress)
-      }
-    } else if (walletAddress) {
+      // Always sync address. Use balance if available, otherwise just sync address.
+      const bal = usdcBalance ? parseFloat(usdcBalance.formatted) : 0
+      setWalletConnection(wagmiAddress, bal)
+    } else if (!wagmiConnected && walletAddress) {
       setWalletConnection(null)
     }
   }, [wagmiConnected, wagmiAddress, usdcBalance, setWalletConnection, walletAddress])
@@ -451,6 +449,10 @@ export default function DashboardPage() {
         data-compact={settings.compactMode}
       >
         <div className="mx-auto max-w-[1800px]">
+          {/* Getting Started - shows when no wallet connected */}
+          {!walletAddress && (
+            <GettingStarted onDismiss={() => {}} />
+          )}
           <AnimatePresence mode="wait">
             {/* Overview Tab */}
             {activeTab === 'overview' && (
