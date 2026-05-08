@@ -134,7 +134,6 @@ interface DashboardStore {
   // Connection state
   wsConnected: boolean
   liveCapital: number | null
-  simulationActive: boolean
 
   // Toast notifications
   toasts: Toast[]
@@ -151,7 +150,6 @@ interface DashboardStore {
   batchUpdateMarkets: (markets: Market[]) => void
   addNewsAlert: (news: NewsEvent) => void
   setWsConnected: (connected: boolean) => void
-  setSimulationActive: (active: boolean) => void
   setWalletConnection: (address: string | null, balance?: number) => void
 }
 
@@ -166,7 +164,6 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
   newsAlerts: [],
   wsConnected: false,
   liveCapital: null,
-  simulationActive: false,
   toasts: [],
 
   addToast: (toast) =>
@@ -235,8 +232,6 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
     })),
 
   setWsConnected: (connected) => set({ wsConnected: connected }),
-
-  setSimulationActive: (active) => set({ simulationActive: active }),
 
   setWalletConnection: (address, balance?) =>
     set((state) => ({
