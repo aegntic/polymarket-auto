@@ -1,15 +1,14 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Radar, ChevronDown, ChevronUp, AlertTriangle, ArrowUpDown, Fish, ShoppingCart, TrendingUp, TrendingDown, Loader2, Check, X } from 'lucide-react'
+import { Radar, ChevronDown, ChevronUp, ArrowUpDown, ShoppingCart, TrendingUp, TrendingDown, Loader2, Check, X } from 'lucide-react'
 import { useDashboardStore, type Market } from '@/lib/store'
-import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
-import { parseUSDC } from '@/lib/trading-service'
+import { usePolymarketTrading } from '@/hooks/usePolymarketTrading'
 import { toast } from 'sonner'
 
 type SortMode = 'mispricing' | 'volume' | 'category'
@@ -35,21 +34,19 @@ function TradeModal({ market, onClose }: { market: Market; onClose: () => void }
   const [amount, setAmount] = useState('10')
   const [trading, setTrading] = useState(false)
   const [txHash, setTxHash] = useState<string | null>(null)
-  const { address } = useAccount()
-  const { data: walletClient } = useWalletClient()
-  const publicClient = usePublicClient()
-  const queryClient = useQueryClient()
+  const { buyYes, buyNo, isReady } = usePolymarketTrading()
 
   const price = outcome === 'YES' ? market.yesPrice : market.noPrice
   const potentialReturn = (parseFloat(amount) / price).toFixed(2)
   const profit = (parseFloat(potentialReturn) - parseFloat(amount)).toFixed(2)
 
-  const handleTrade = useCallback(async () => {
-    if (!walletClient || !publicClient || !address) {
+  const handleTrade = async () => {
+    if (!isReady) {
       toast.error('Wallet not connected')
       return
     }
-    if (parseFloat(amount) <= 0 || parseFloat(amount) > 10000) {
+    const size = parseFloat(amount)
+    if (size <= 0 || size > 10000) {
       toast.error('Amount must be between $0.01 and $10,000')
       return
     }
@@ -58,94 +55,24 @@ function TradeModal({ market, onClose }: { market: Market; onClose: () => void }
     setTxHash(null)
 
     try {
-      // Check USDC balance first
-      const usdcBalance = await publicClient.readContract({
-        address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
-        abi: [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] }],
-        functionName: 'balanceOf',
-        args: [address],
-      }) as bigint
+      const result = outcome === 'YES'
+        ? await buyYes(market.id, price, size)
+        : await buyNo(market.id, price, size)
 
-      const amountUSDC = parseUSDC(parseFloat(amount))
-      if (usdcBalance < amountUSDC) {
-        toast.error(`Insufficient USDC balance. You have $${(Number(usdcBalance) / 1e6).toFixed(2)} USDC`)
-        setTrading(false)
-        return
+      if (result.success && result.transactionHash) {
+        setTxHash(result.transactionHash)
+        toast.success(`Trade placed! ${outcome} @ ${(price * 100).toFixed(1)}¢ for $${amount}`)
+        setTimeout(onClose, 2000)
+      } else {
+        toast.error(result.error || 'Trade failed')
       }
-
-      // Check and approve USDC allowance
-      const allowance = await publicClient.readContract({
-        address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
-        abi: [{ name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ type: 'uint256' }] }],
-        functionName: 'allowance',
-        args: [address, '0xC5d563A36AE78145C45a50134d48A1215220f80a'],
-      }) as bigint
-
-      if (allowance < amountUSDC) {
-        toast.info('Approving USDC spending...')
-        const approveHash = await walletClient.writeContract({
-          address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
-          abi: [{ name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] }],
-          functionName: 'approve',
-          args: ['0xC5d563A36AE78145C45a50134d48A1215220f80a', amountUSDC],
-        })
-        await publicClient.waitForTransactionReceipt({ hash: approveHash })
-        toast.success('USDC approved!')
-      }
-
-      // Place the trade via Polymarket CLOB
-      const priceWei = BigInt(Math.round(price * 1_000_000))
-      const sizeWei = amountUSDC
-      const outcomeNum = outcome === 'YES' ? 1 : 0
-
-      toast.info('Placing trade on Polymarket...')
-      const hash = await walletClient.writeContract({
-        address: '0xC5d563A36AE78145C45a50134d48A1215220f80a',
-        abi: [{
-          name: 'createOrder',
-          type: 'function',
-          stateMutability: 'nonpayable',
-          inputs: [
-            { name: 'marketId', type: 'uint256' },
-            { name: 'outcome', type: 'uint8' },
-            { name: 'price', type: 'uint256' },
-            { name: 'size', type: 'uint256' },
-          ],
-          outputs: [{ type: 'uint256' }],
-        }],
-        functionName: 'createOrder',
-        args: [BigInt(market.id), outcomeNum, priceWei, sizeWei],
-      })
-
-      setTxHash(hash)
-      toast.success(`Trade placed! ${outcome} @ ${(price * 100).toFixed(1)}¢ for $${amount}`)
-
-      // Record the trade in our DB
-      await fetch('/api/trades', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          marketId: market.id,
-          side: outcome,
-          size: parseFloat(amount),
-          price,
-          isAgentTrade: false,
-          status: 'pending',
-          txHash: hash,
-        }),
-      })
-
-      queryClient.invalidateQueries({ queryKey: ['recent-trades'] })
-      queryClient.invalidateQueries({ queryKey: ['agent'] })
-
-      setTimeout(onClose, 2000)
     } catch (error: any) {
       console.error('Trade failed:', error)
-      toast.error(error?.message || 'Trade failed. Check console for details.')
+      toast.error(error?.message || 'Trade failed')
     } finally {
       setTrading(false)
     }
-  }, [walletClient, publicClient, address, amount, outcome, price, market, queryClient, onClose])
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
@@ -248,7 +175,7 @@ function TradeModal({ market, onClose }: { market: Market; onClose: () => void }
         {/* Trade button */}
         <button
           onClick={handleTrade}
-          disabled={trading || !address}
+          disabled={trading || !isReady}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00ff41]/10 py-3 text-sm font-bold text-[#00ff41] transition-all hover:bg-[#00ff41]/20 disabled:opacity-50"
         >
           {trading ? (
@@ -256,7 +183,7 @@ function TradeModal({ market, onClose }: { market: Market; onClose: () => void }
               <Loader2 className="h-4 w-4 animate-spin" />
               {txHash ? 'Confirming...' : 'Placing Trade...'}
             </>
-          ) : !address ? (
+          ) : !isReady ? (
             'Connect Wallet First'
           ) : (
             <>
@@ -297,7 +224,6 @@ export function MarketScanner() {
   const [sortMode, setSortMode] = useState<SortMode>('volume')
   const [tradeMarket, setTradeMarket] = useState<Market | null>(null)
 
-  // Merge live market updates with API data
   const mergedMarkets = useMemo(() => {
     if (!markets) return liveMarkets
     const liveMap = new Map(liveMarkets.map((m) => [m.id, m]))
@@ -395,7 +321,6 @@ export function MarketScanner() {
                           <p className="mt-1 text-[12px] leading-snug text-[#cbd5e1] line-clamp-2">
                             {market.title}
                           </p>
-                          {/* Price bars */}
                           <div className="mt-1.5 flex items-center gap-2 text-[10px]">
                             <div className="flex items-center gap-1">
                               <span className="w-7 text-[#00ff41]">YES</span>
