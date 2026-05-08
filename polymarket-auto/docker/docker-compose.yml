@@ -1,87 +1,92 @@
-# StealthTrace Multi-Agent Orchestration
-# Each agent scans different market category slices with isolated network stacks.
+# PolyAgent Swarm — Multi-Agent Trading Cluster
+# Each agent scans its category, executes trades via CLOB, learns from PnL.
+# All agents share a SwarmBrain SQLite DB for cross-instance learning.
 #
-# Quick start:
-#   docker compose up -d              # launch all agents
-#   docker compose logs -f sports     # tail specific agent
-#   docker compose down               # stop all
-#   curl http://localhost:9090/metrics  # Prometheus
-#   curl -X POST http://localhost:9091/killswitch  # emergency stop
-
-version: "3.9"
+# Quick start:  docker compose up -d
+# Status:       docker compose ps
+# Logs:         docker compose logs -f sports
+# Stop:         docker compose down
+# Metrics:      curl http://localhost:9090/metrics
 
 services:
-  # ── Agent: Sports & Esports (La Liga, EPL, niche brackets) ──
   sports:
     build: .
-    container_name: stealth-sports
+    container_name: polyagent-sports
     restart: unless-stopped
     environment:
       POLYMARKET_GAMMA_IP: "104.18.34.205"
-      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY:-}"
-      XAI_API_KEY: "${XAI_API_KEY:-}"
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY}"
+      XAI_API_KEY: "${XAI_API_KEY}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      POLYMARKET_PRIVATE_KEY: "${POLYMARKET_PRIVATE_KEY:-}"
       STEALTH_CATEGORY: sports
     volumes:
-      - stealth_db:/app/data
+      - swarm_brain:/app/data
       - ./state:/app/state
 
-  # ── Agent: Geopolitics (ceasefires, tariffs, elections) ──
   geopolitics:
     build: .
-    container_name: stealth-geopolitics
+    container_name: polyagent-geopolitics
     restart: unless-stopped
     environment:
       POLYMARKET_GAMMA_IP: "104.18.34.205"
-      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY:-}"
-      XAI_API_KEY: "${XAI_API_KEY:-}"
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY}"
+      XAI_API_KEY: "${XAI_API_KEY}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      POLYMARKET_PRIVATE_KEY: "${POLYMARKET_PRIVATE_KEY:-}"
       STEALTH_CATEGORY: geopolitics
     volumes:
-      - stealth_db:/app/data
+      - swarm_brain:/app/data
       - ./state:/app/state
 
-  # ── Agent: Tech & Crypto ──
   tech:
     build: .
-    container_name: stealth-tech
+    container_name: polyagent-tech
     restart: unless-stopped
     environment:
       POLYMARKET_GAMMA_IP: "104.18.34.205"
-      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY:-}"
-      XAI_API_KEY: "${XAI_API_KEY:-}"
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY}"
+      XAI_API_KEY: "${XAI_API_KEY}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      POLYMARKET_PRIVATE_KEY: "${POLYMARKET_PRIVATE_KEY:-}"
       STEALTH_CATEGORY: tech
     volumes:
-      - stealth_db:/app/data
+      - swarm_brain:/app/data
       - ./state:/app/state
 
-  # ── Agent: Weather & Climate ──
   weather:
     build: .
-    container_name: stealth-weather
+    container_name: polyagent-weather
     restart: unless-stopped
     environment:
       POLYMARKET_GAMMA_IP: "104.18.34.205"
-      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY:-}"
-      XAI_API_KEY: "${XAI_API_KEY:-}"
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY}"
+      XAI_API_KEY: "${XAI_API_KEY}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      POLYMARKET_PRIVATE_KEY: "${POLYMARKET_PRIVATE_KEY:-}"
       STEALTH_CATEGORY: weather
     volumes:
-      - stealth_db:/app/data
+      - swarm_brain:/app/data
       - ./state:/app/state
 
-  # ── Orchestrator: metrics, cluster detection, kill-switch ──
   orchestrator:
     build:
       context: .
       dockerfile: Dockerfile.orchestrator
-    container_name: stealth-orchestrator
+    container_name: polyagent-orchestrator
     restart: unless-stopped
     ports:
       - "9090:9090"
       - "9091:9091"
     environment:
-      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY:-}"
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY}"
     volumes:
-      - stealth_db:/app/data
+      - swarm_brain:/app/data
       - ./state:/app/state
 
 volumes:
-  stealth_db:
+  swarm_brain:
