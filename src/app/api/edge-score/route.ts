@@ -3,10 +3,12 @@ import { scoreTopMarkets, type MarketEdgeScore } from '@/lib/edge-scorer'
 import { runRiskChecks, DEFAULT_RISK_CONFIG } from '@/lib/risk-guardian'
 import { logger } from '@/lib/logger'
 
+export const maxDuration = 30 // 30 second timeout
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 50)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '5'), 10) // Reduced default
     const minEdge = parseInt(searchParams.get('minEdge') || '500')
     const withRisk = searchParams.get('risk') === 'true'
 
