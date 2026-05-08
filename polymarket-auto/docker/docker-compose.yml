@@ -1,0 +1,87 @@
+# StealthTrace Multi-Agent Orchestration
+# Each agent scans different market category slices with isolated network stacks.
+#
+# Quick start:
+#   docker compose up -d              # launch all agents
+#   docker compose logs -f sports     # tail specific agent
+#   docker compose down               # stop all
+#   curl http://localhost:9090/metrics  # Prometheus
+#   curl -X POST http://localhost:9091/killswitch  # emergency stop
+
+version: "3.9"
+
+services:
+  # ── Agent: Sports & Esports (La Liga, EPL, niche brackets) ──
+  sports:
+    build: .
+    container_name: stealth-sports
+    restart: unless-stopped
+    environment:
+      POLYMARKET_GAMMA_IP: "104.18.34.205"
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY:-}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+      STEALTH_CATEGORY: sports
+    volumes:
+      - stealth_db:/app/data
+      - ./state:/app/state
+
+  # ── Agent: Geopolitics (ceasefires, tariffs, elections) ──
+  geopolitics:
+    build: .
+    container_name: stealth-geopolitics
+    restart: unless-stopped
+    environment:
+      POLYMARKET_GAMMA_IP: "104.18.34.205"
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY:-}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+      STEALTH_CATEGORY: geopolitics
+    volumes:
+      - stealth_db:/app/data
+      - ./state:/app/state
+
+  # ── Agent: Tech & Crypto ──
+  tech:
+    build: .
+    container_name: stealth-tech
+    restart: unless-stopped
+    environment:
+      POLYMARKET_GAMMA_IP: "104.18.34.205"
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY:-}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+      STEALTH_CATEGORY: tech
+    volumes:
+      - stealth_db:/app/data
+      - ./state:/app/state
+
+  # ── Agent: Weather & Climate ──
+  weather:
+    build: .
+    container_name: stealth-weather
+    restart: unless-stopped
+    environment:
+      POLYMARKET_GAMMA_IP: "104.18.34.205"
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY:-}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+      STEALTH_CATEGORY: weather
+    volumes:
+      - stealth_db:/app/data
+      - ./state:/app/state
+
+  # ── Orchestrator: metrics, cluster detection, kill-switch ──
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    container_name: stealth-orchestrator
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+      - "9091:9091"
+    environment:
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY:-}"
+    volumes:
+      - stealth_db:/app/data
+      - ./state:/app/state
+
+volumes:
+  stealth_db:
