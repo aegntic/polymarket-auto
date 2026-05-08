@@ -1,60 +1,97 @@
 import { NextResponse } from 'next/server'
+import { db } from '@/lib/db'
 import { logger } from '@/lib/logger'
 
 export async function GET() {
   try {
-    // Generate performance time series data
-    // Simulates capital growth from $25 to $4,237 over ~8 hours
-    const totalPoints = 50
-    const startCapital = 25
-    const endCapital = 4237
-    const startTime = Date.now() - 8 * 3600000 // 8 hours ago
-    const interval = (8 * 3600000) / (totalPoints - 1)
+    // Get the latest agent state
+    const agentState = await db.agentState.findFirst({
+      orderBy: { updatedAt: 'desc' },
+    })
 
-    const data = []
+    // Get all trades ordered by time
+    const trades = await db.trade.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: {
+        pnl: true,
+        createdAt: true,
+        size: true,
+      },
+    })
 
-    // Use a compounding growth curve with some noise
-    // Capital grows exponentially: C(t) = C0 * (C_end/C0)^(t/T)
-    const growthRate = Math.log(endCapital / startCapital)
+    const capitalBase = agentState?.capitalBase ?? 0
+    const currentCapital = agentState?.currentCapital ?? capitalBase
 
-    let cumulativeTrades = 0
+    // Build a time series from actual trade PnL
+    // If no trades, return a single point at capitalBase
+    if (trades.length === 0) {
+      return NextResponse.json({
+        series: capitalBase > 0 ? [{
+          timestamp: new Date().toISOString(),
+          capital: capitalBase,
+          trades: 0,
+          drawdown: 0,
+        }] : [],
+        summary: {
+          currentCapital,
+          capitalBase,
+          totalPnl: agentState?.totalPnl ?? 0,
+          totalTrades: 0,
+          winRate: agentState?.winRate ?? 0,
+          sharpeRatio: agentState?.sharpeRatio ?? null,
+          maxDrawdown: agentState?.maxDrawdown ?? null,
+        },
+      })
+    }
 
-    for (let i = 0; i < totalPoints; i++) {
-      const t = i / (totalPoints - 1) // 0 to 1
-      const timestamp = new Date(startTime + i * interval)
+    // Build cumulative capital curve from trade PnL
+    let runningCapital = capitalBase
+    let peak = capitalBase
+    let maxDrawdown = 0
+    const points = []
 
-      // Exponential growth base
-      let capital = startCapital * Math.exp(growthRate * t)
+    // Always start at capitalBase
+    points.push({
+      timestamp: trades[0].createdAt.toISOString(),
+      capital: capitalBase,
+      trades: 0,
+      drawdown: 0,
+    })
 
-      // Add realistic noise / drawdowns
-      const noise = Math.sin(i * 0.7) * 0.05 + Math.sin(i * 1.3) * 0.03 + Math.sin(i * 2.1) * 0.02
-      capital = capital * (1 + noise)
+    for (let i = 0; i < trades.length; i++) {
+      const trade = trades[i]
+      const pnl = trade.pnl ?? 0
+      runningCapital += pnl
 
-      // Ensure capital stays positive and doesn't exceed endCapital at the end
-      capital = Math.max(capital, startCapital)
-      if (i === totalPoints - 1) {
-        capital = endCapital
-      }
+      if (runningCapital > peak) peak = runningCapital
+      const drawdown = peak > 0 ? Math.max(0, (peak - runningCapital) / peak) : 0
+      if (drawdown > maxDrawdown) maxDrawdown = drawdown
 
-      // Drawdown calculation (relative to peak)
-      const peakSoFar = startCapital * Math.exp(growthRate * t) * 1.05
-      const drawdown = Math.max(0, (peakSoFar - capital) / peakSoFar)
-
-      // Trades increment (more trades as capital grows)
-      const tradeIncrement = Math.floor(Math.random() * 3) + (capital > 500 ? 2 : 1)
-      cumulativeTrades += tradeIncrement
-
-      data.push({
-        timestamp: timestamp.toISOString(),
-        capital: parseFloat(capital.toFixed(2)),
-        trades: cumulativeTrades,
+      points.push({
+        timestamp: trade.createdAt.toISOString(),
+        capital: parseFloat(runningCapital.toFixed(2)),
+        trades: i + 1,
         drawdown: parseFloat(drawdown.toFixed(4)),
       })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json({
+      series: points,
+      summary: {
+        currentCapital,
+        capitalBase,
+        totalPnl: agentState?.totalPnl ?? (currentCapital - capitalBase),
+        totalTrades: trades.length,
+        winRate: agentState?.winRate ?? 0,
+        sharpeRatio: agentState?.sharpeRatio ?? null,
+        maxDrawdown: agentState?.maxDrawdown ?? maxDrawdown,
+      },
+    })
   } catch (error) {
-    logger.error('PerformanceAPI', 'Failed to generate performance data', error)
-    return NextResponse.json({ error: 'Failed to generate performance data' }, { status: 500 })
+    logger.error('PerformanceAPI', 'Failed to fetch performance data', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch performance data' },
+      { status: 500 }
+    )
   }
 }

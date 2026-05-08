@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { TrendingUp } from 'lucide-react'
+import { TrendingUp, TrendingDown } from 'lucide-react'
 import {
   AreaChart,
   Area,
@@ -14,20 +14,31 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
-  ReferenceDot,
-  Label,
 } from 'recharts'
-import { useDashboardStore, type PerformancePoint } from '@/lib/store'
+import { useDashboardStore } from '@/lib/store'
 
 type TimeRange = '1H' | '4H' | '8H' | 'ALL'
 
-const MILESTONES = [
-  { capital: 50, label: '2x', color: '#f59e0b' },
-  { capital: 250, label: '10x', color: '#00ff41' },
-  { capital: 1250, label: '50x', color: '#22d3ee' },
-  { capital: 4237, label: '169x', color: '#00ff41' },
-]
+interface PerformancePoint {
+  timestamp: string
+  capital: number
+  trades: number
+  drawdown: number
+  ma?: number
+}
+
+interface PerformanceData {
+  series: PerformancePoint[]
+  summary: {
+    currentCapital: number | null
+    capitalBase: number | null
+    totalPnl: number
+    totalTrades: number
+    winRate: number
+    sharpeRatio: number | null
+    maxDrawdown: number | null
+  }
+}
 
 function computeMA(data: PerformancePoint[], window = 5): PerformancePoint[] {
   return data.map((point, i) => {
@@ -53,46 +64,49 @@ export function PerformanceChart() {
   const liveCapital = useDashboardStore((s) => s.liveCapital)
   const actualCapital = walletBalance || liveCapital || 0
 
-  const { data: performance, isLoading, error } = useQuery<PerformancePoint[]>({
+  const { data, isLoading, error } = useQuery<PerformanceData>({
     queryKey: ['performance'],
     queryFn: () => fetch('/api/performance').then((r) => r.json()),
     refetchInterval: 60000,
   })
 
+  const series = data?.series ?? []
+  const summary = data?.summary
+
   const filteredData = useMemo(() => {
-    if (!Array.isArray(performance) || performance.length === 0) return []
-    const rangeData = filterByRange(performance, timeRange)
-    
-    if (!Array.isArray(rangeData) || rangeData.length === 0) return []
-    
-    // Scale data to match actual current capital
-    const lastPoint = rangeData[rangeData.length - 1]?.capital
-    if (actualCapital > 0 && lastPoint && lastPoint > 0) {
-      const ratio = actualCapital / lastPoint
-      const scaled = rangeData.map(p => ({
-        ...p,
-        capital: p.capital * ratio,
-      }))
-      return computeMA(scaled)
+    if (series.length === 0) return []
+    const rangeData = filterByRange(series, timeRange)
+    if (rangeData.length === 0) return []
+
+    // Scale data to match actual wallet capital if available
+    if (actualCapital > 0 && rangeData.length > 0) {
+      const lastPoint = rangeData[rangeData.length - 1]?.capital
+      if (lastPoint && lastPoint > 0) {
+        const ratio = actualCapital / lastPoint
+        const scaled = rangeData.map(p => ({
+          ...p,
+          capital: p.capital * ratio,
+        }))
+        return computeMA(scaled)
+      }
     }
-    
+
     return computeMA(rangeData)
-  }, [performance, timeRange, actualCapital])
+  }, [series, timeRange, actualCapital])
 
-  const currentCapital = filteredData.length > 0 
-    ? filteredData[filteredData.length - 1].capital 
-    : (actualCapital || 0)
+  const currentCapital = filteredData.length > 0
+    ? filteredData[filteredData.length - 1].capital
+    : (actualCapital || summary?.currentCapital || summary?.capitalBase || 0)
 
-  const startCapital = filteredData.length > 0 
-    ? filteredData[0].capital 
-    : 25
+  const startCapital = filteredData.length > 0
+    ? filteredData[0].capital
+    : (summary?.capitalBase || 0)
 
-  const pnlPercent =
-    startCapital > 0
-      ? (((currentCapital - startCapital) / startCapital) * 100).toFixed(0)
-      : '0'
-  const returnMultiple =
-    startCapital > 0 ? (currentCapital / startCapital).toFixed(1) : '0'
+  const pnlPercent = startCapital > 0
+    ? (((currentCapital - startCapital) / startCapital) * 100).toFixed(0)
+    : '0'
+  const returnMultiple = startCapital > 0 ? (currentCapital / startCapital).toFixed(1) : '0'
+  const isPositive = parseFloat(pnlPercent) >= 0
 
   const ranges: TimeRange[] = ['1H', '4H', '8H', 'ALL']
 
@@ -101,10 +115,13 @@ export function PerformanceChart() {
       <CardHeader className="pb-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold text-[#94a3b8]">
-            <TrendingUp className="h-4 w-4 text-[#00ff41]" />
+            {isPositive ? (
+              <TrendingUp className="h-4 w-4 text-[#00ff41]" />
+            ) : (
+              <TrendingDown className="h-4 w-4 text-[#ef4444]" />
+            )}
             PERFORMANCE
           </CardTitle>
-          {/* Time Range Selector */}
           <div className="flex items-center gap-0.5 rounded-lg border border-[#1e293b] bg-[#0a0e17]/80 p-0.5">
             {ranges.map((r) => (
               <button
@@ -123,25 +140,35 @@ export function PerformanceChart() {
         </div>
         <div className="mt-1 flex min-w-0 items-end justify-between overflow-hidden">
           <div className="min-w-0">
-            <div className="font-mono text-lg font-bold text-[#00ff41] glow-green">
+            <div className={`font-mono text-lg font-bold ${isPositive ? 'text-[#00ff41] glow-green' : 'text-[#ef4444]'}`}>
               ${currentCapital.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="text-[10px] text-[#64748b]">
-              Starting: ${startCapital.toFixed(2)} ·{' '}
-              <span className="text-[#00ff41]">+{pnlPercent}%</span>
+              {startCapital > 0 ? (
+                <>Starting: ${startCapital.toFixed(2)} ·{' '}
+                <span className={isPositive ? 'text-[#00ff41]' : 'text-[#ef4444]'}>
+                  {isPositive ? '+' : ''}{pnlPercent}%
+                </span></>
+              ) : (
+                'Connect wallet to track performance'
+              )}
             </div>
           </div>
-          <span className="animate-return-glow font-mono text-xl font-bold text-[#00ff41]">
-            {returnMultiple}x
-          </span>
+          {startCapital > 0 && (
+            <span className={`font-mono text-xl font-bold ${isPositive ? 'text-[#00ff41]' : 'text-[#ef4444]'}`}>
+              {returnMultiple}x
+            </span>
+          )}
         </div>
       </CardHeader>
       <CardContent>
         {error ? (
-          <p className="text-xs text-red-400">Failed to load performance data</p>
+          <div className="flex h-[260px] items-center justify-center">
+            <p className="text-xs text-[#ef4444]">Failed to load performance data</p>
+          </div>
         ) : isLoading ? (
           <Skeleton className="h-[260px] w-full bg-[#1e293b]/50" />
-        ) : filteredData.length > 0 ? (
+        ) : filteredData.length > 1 ? (
           <div className="h-[260px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
@@ -204,35 +231,6 @@ export function PerformanceChart() {
                     return [`$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Capital']
                   }}
                 />
-                {/* Chart title inside chart area */}
-                <text x="20" y="20" fill="#64748b" fontSize={11} fontFamily="monospace" opacity={0.6}>
-                  Capital Over Time
-                </text>
-                {/* Milestone Reference Lines */}
-                {MILESTONES.map((milestone) => {
-                  const dataPoint = filteredData.find(
-                    (p) => Math.abs(p.capital - milestone.capital) < milestone.capital * 0.15
-                  )
-                  if (!dataPoint) return null
-                  return (
-                    <ReferenceLine
-                      key={milestone.label}
-                      x={dataPoint.timestamp}
-                      stroke={milestone.color}
-                      strokeDasharray="3 3"
-                      strokeOpacity={0.4}
-                    >
-                      <Label
-                        value={milestone.label}
-                        position="top"
-                        fill={milestone.color}
-                        fontSize={9}
-                        opacity={0.7}
-                      />
-                    </ReferenceLine>
-                  )
-                })}
-                {/* Drawdown Area */}
                 <Area
                   type="monotone"
                   dataKey="drawdown"
@@ -242,7 +240,6 @@ export function PerformanceChart() {
                   fill="url(#drawdownGradient)"
                   dot={false}
                 />
-                {/* Main Capital Area */}
                 <Area
                   type="monotone"
                   dataKey="capital"
@@ -257,7 +254,6 @@ export function PerformanceChart() {
                     strokeWidth: 2,
                   }}
                 />
-                {/* Moving Average Line */}
                 <Line
                   type="monotone"
                   dataKey="ma"
@@ -267,31 +263,15 @@ export function PerformanceChart() {
                   dot={false}
                   activeDot={false}
                 />
-                {/* Milestone Dots */}
-                {MILESTONES.map((milestone) => {
-                  const dataPoint = filteredData.find(
-                    (p) => Math.abs(p.capital - milestone.capital) < milestone.capital * 0.15
-                  )
-                  if (!dataPoint) return null
-                  return (
-                    <ReferenceDot
-                      key={`dot-${milestone.label}`}
-                      x={dataPoint.timestamp}
-                      y={dataPoint.capital}
-                      r={3}
-                      fill={milestone.color}
-                      stroke="#0f1724"
-                      strokeWidth={2}
-                    />
-                  )
-                })}
               </AreaChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <p className="py-8 text-center text-xs text-[#64748b]">
-            No performance data
-          </p>
+          <div className="flex h-[260px] flex-col items-center justify-center gap-2 text-[#64748b]">
+            <TrendingUp className="h-8 w-8 opacity-30" />
+            <p className="text-xs">No trade data yet</p>
+            <p className="text-[10px]">Performance chart will appear after your first trade</p>
+          </div>
         )}
       </CardContent>
     </Card>
