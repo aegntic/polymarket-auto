@@ -88,48 +88,75 @@ export function QuickActionsToolbar() {
   const handleAnalyze = useCallback(async () => {
     setAnalyzing(true)
     try {
-      // Fetch top-performing wallets (past 90 days, sorted by edge score)
-      const walletsRes = await fetch('/api/wallets?limit=5')
-      const wallets = await walletsRes.json()
-      
-      if (!wallets || wallets.length === 0) {
-        alert('No wallet data found. Connect a wallet or wait for data.')
+      // Fetch live markets
+      const marketsRes = await fetch('/api/markets?limit=5')
+      const markets = await marketsRes.json()
+
+      if (!markets || markets.length === 0) {
+        useDashboardStore.getState().addToast({
+          type: 'warning',
+          title: 'No Markets',
+          description: 'No live markets available to analyze.',
+        })
         setAnalyzing(false)
         return
       }
 
-      // Analyze top 3 wallets with xAI
+      // Analyze top 3 markets by volume with xAI
+      const topMarkets = markets
+        .sort((a: any, b: any) => b.volume - a.volume)
+        .slice(0, 3)
+
       const results = []
-      for (const wallet of wallets.slice(0, 3)) {
+      for (const market of topMarkets) {
         const analysis = await fetch('/api/agent-decide', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            newsTitle: `Wallet Analysis: ${wallet.address.slice(0, 8)}...`,
-            newsSentiment: wallet.winRate > 0.6 ? 0.8 : 0.5,
-            marketTitle: `Wallet Performance Analysis`,
-            yesPrice: wallet.winRate,
-            noPrice: 1 - wallet.winRate,
+            newsTitle: `Market: ${market.title}`,
+            newsSentiment: 0.5,
+            marketTitle: market.title,
+            yesPrice: market.yesPrice,
+            noPrice: market.noPrice,
             bankroll: 55,
-            walletData: {
-              address: wallet.address,
-              winRate: wallet.winRate,
-              totalPnl: wallet.totalPnl,
-              edgeScore: wallet.edgeScore,
-              totalTrades: wallet.totalTrades,
-              isEdgeTrader: wallet.isEdgeTrader,
-            }
           }),
         })
         const result = await analysis.json()
-        results.push({ wallet: wallet.address, analysis: result })
+        results.push({ market: market.title, analysis: result })
       }
-      
-      console.log('Wallet Analysis Results:', results)
-      alert(`Analyzed ${results.length} top wallets! Check console for details.`)
+
+      console.log('Market Analysis Results:', results)
+
+      // Add agent decisions to store
+      const decisions = results.map((r: any) => ({
+        id: `analysis-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        type: 'analyze',
+        reasoning: r.analysis.reasoning || 'Analysis complete',
+        confidence: r.analysis.confidence || 0.5,
+        marketId: topMarkets.find((m: any) => m.title === r.market)?.id || null,
+        action: r.analysis.decision || 'HOLD',
+        size: r.analysis.positionSize || null,
+        kellyFraction: r.analysis.kellyFraction || null,
+        outcome: null,
+        pnl: null,
+        createdAt: new Date().toISOString(),
+      }))
+
+      const store = useDashboardStore.getState()
+      decisions.forEach((d: any) => store.addAgentDecision(d))
+
+      useDashboardStore.getState().addToast({
+        type: 'success',
+        title: 'Analysis Complete',
+        description: `Analyzed ${results.length} markets. Check Agent Console for results.`,
+      })
     } catch (error) {
-      console.error('Wallet analysis failed:', error)
-      alert('Analysis failed. Check console for details.')
+      console.error('Market analysis failed:', error)
+      useDashboardStore.getState().addToast({
+        type: 'error',
+        title: 'Analysis Failed',
+        description: 'Could not analyze markets. Check console for details.',
+      })
     } finally {
       setAnalyzing(false)
     }
