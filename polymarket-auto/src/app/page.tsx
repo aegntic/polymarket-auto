@@ -7,7 +7,6 @@ import { useLiveData } from '@/hooks/useLiveData'
 import { useAccount, useBalance } from 'wagmi'
 import { useDashboardStore, type AgentState } from '@/lib/store'
 import { WalletMenu } from '@/components/dashboard/WalletMenu'
-import { ToastNotificationSystem } from '@/components/dashboard/ToastNotificationSystem'
 import { GettingStarted } from '@/components/dashboard/GettingStarted'
 import { useDashboardSettings } from '@/hooks/useDashboardSettings'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -444,8 +443,8 @@ export default function DashboardPage() {
         data-compact={settings.compactMode}
       >
         <div className="mx-auto max-w-[1800px]">
-          {/* Getting Started - shows when no wallet connected */}
-          <GettingStarted />
+          {/* Getting Started modal - blocks dashboard until dismissed */}
+          <GettingStarted onDismiss={() => {}} />
           <AnimatePresence mode="wait">
             {/* Overview Tab */}
             {activeTab === 'overview' && (
