@@ -239,14 +239,14 @@ export default function DashboardPage() {
   const { address: wagmiAddress, isConnected: wagmiConnected } = useAccount()
   const { data: usdcBalance } = useBalance({
     address: wagmiAddress,
-    token: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+    contract: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}`,
     chainId: 137,
   })
 
   useEffect(() => {
     if (wagmiConnected && wagmiAddress) {
       // Always sync address. Use balance if available, otherwise just sync address.
-      const bal = usdcBalance ? parseFloat(usdcBalance.formatted) : 0
+      const bal = usdcBalance ? parseFloat(usdcBalance.value.toString()) / Math.pow(10, usdcBalance.decimals) : 0
       setWalletConnection(wagmiAddress, bal)
     } else if (!wagmiConnected && walletAddress) {
       setWalletConnection(null)

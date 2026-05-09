@@ -35,7 +35,7 @@ export function WalletMenu() {
 
   const { data: usdcBal } = useBalance({
     address,
-    token: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+    contract: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}`,
     chainId: polygon.id,
   })
   const { data: maticBal } = useBalance({
@@ -46,7 +46,7 @@ export function WalletMenu() {
   // Sync with store
   useEffect(() => {
     if (isConnected && address) {
-      const balance = usdcBal ? parseFloat(usdcBal.formatted) : 0
+      const balance = usdcBal ? parseFloat(usdcBal.value.toString()) / Math.pow(10, usdcBal.decimals) : 0
       setWalletConnection(address, balance)
     } else {
       setWalletConnection(null)
@@ -223,13 +223,13 @@ export function WalletMenu() {
                   <div className="rounded-lg border border-[#1e293b] bg-[#0a0e17]/50 px-2.5 py-2">
                     <div className="text-[9px] font-medium uppercase tracking-wider text-[#64748b]">USDC</div>
                     <div className="mt-0.5 font-mono text-base font-bold text-[#00ff41] glow-green">
-                      ${usdcBal ? parseFloat(usdcBal.formatted).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                      ${usdcBal ? (parseFloat(usdcBal.value.toString()) / Math.pow(10, usdcBal.decimals)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
                     </div>
                   </div>
                   <div className="rounded-lg border border-[#1e293b] bg-[#0a0e17]/50 px-2.5 py-2">
                     <div className="text-[9px] font-medium uppercase tracking-wider text-[#64748b]">POL</div>
                     <div className="mt-0.5 font-mono text-base font-bold text-[#8247e5]">
-                      {maticBal ? parseFloat(maticBal.formatted).toFixed(4) : '0.0000'}
+                      {maticBal ? (parseFloat(maticBal.value.toString()) / Math.pow(10, maticBal.decimals)).toFixed(4) : '0.0000'}
                     </div>
                   </div>
                 </div>
