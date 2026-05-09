@@ -48,15 +48,17 @@ export async function GET() {
     let runningCapital = capitalBase
     let peak = capitalBase
     let maxDrawdown = 0
-    const points = []
+    const points: Array<{ timestamp: string; capital: number; trades: number; drawdown: number }> = []
 
     // Always start at capitalBase
-    points.push({
-      timestamp: trades[0].createdAt.toISOString(),
-      capital: capitalBase,
-      trades: 0,
-      drawdown: 0,
-    })
+    if (trades.length > 0) {
+      points.push({
+        timestamp: trades[0].createdAt.toISOString(),
+        capital: capitalBase,
+        trades: 0,
+        drawdown: 0,
+      })
+    }
 
     for (let i = 0; i < trades.length; i++) {
       const trade = trades[i]
