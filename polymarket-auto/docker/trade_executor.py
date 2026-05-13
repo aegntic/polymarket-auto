@@ -73,72 +73,37 @@ RPC_URL = os.environ.get("POLYGON_RPC_URL", "https://polygon-bor-rpc.publicnode.
 CLOB_API_URL = os.environ.get("CLOB_API_URL", "https://clob.polymarket.com")
 CLOB_PROXY_URL = os.environ.get("CLOB_PROXY_URL", "")
 
-CLOB_RELAY_URL = os.environ.get("CLOB_RELAY_URL", "http://172.17.0.1:8877")
-RELAY_ENDPOINTS = {"/order", "/cancel-order", "/cancel-all", "/cancel-orders-by-market"}
+TOR_PROXY_ENDPOINTS = {
+    "/order",
+    "/cancel-order",
+    "/cancel-all",
+    "/cancel-orders-by-market",
+}
 
 try:
     from py_clob_client.http_helpers import helpers as _helpers
     from curl_cffi import requests as cffi_requests
-    import urllib.request as _urllib_request
-    import urllib.error as _urllib_error
-
-    class _RelayResponse:
-        def __init__(self, status_code, body_text):
-            self.status_code = status_code
-            self._text = body_text
-
-        @property
-        def text(self):
-            return self._text
-
-        def json(self):
-            import json as _json
-
-            return _json.loads(self._text)
 
     class _CffiAdapter:
         def __init__(self):
-            self._s = cffi_requests.Session(impersonate="chrome")
-            self._relay_ok = None
+            self._direct = cffi_requests.Session(impersonate="chrome")
+            self._tor = None
+            if CLOB_PROXY_URL:
+                self._tor = cffi_requests.Session(impersonate="chrome")
+                self._tor.proxies = {"https": CLOB_PROXY_URL, "http": CLOB_PROXY_URL}
 
-        def _should_relay(self, method, url):
-            if method.upper() != "POST":
+        def _needs_tor(self, method, url):
+            if method.upper() != "POST" or not self._tor:
                 return False
             from urllib.parse import urlparse
 
-            parsed = urlparse(url)
-            return parsed.path in RELAY_ENDPOINTS
-
-        def _via_relay(self, url, kwargs):
-            from urllib.parse import urlparse
-
-            parsed = urlparse(url)
-            body = kwargs.get("data") or kwargs.get("content") or b""
-            if isinstance(body, str):
-                body = body.encode()
-            headers = kwargs.get("headers", {})
-            relay_req = _urllib_request.Request(
-                f"{CLOB_RELAY_URL}{parsed.path}",
-                data=body,
-                headers=headers,
-                method="POST",
-            )
-            try:
-                with _urllib_request.urlopen(relay_req, timeout=30) as resp:
-                    return _RelayResponse(resp.status, resp.read().decode())
-            except _urllib_error.URLError:
-                return None
+            return urlparse(url).path in TOR_PROXY_ENDPOINTS
 
         def request(self, method, url, **kwargs):
             if "content" in kwargs:
                 kwargs["data"] = kwargs.pop("content")
-
-            if self._should_relay(method, url):
-                resp = self._via_relay(url, kwargs)
-                if resp and resp.status_code < 500:
-                    return resp
-
-            return self._s.request(method, url, **kwargs)
+            session = self._tor if self._needs_tor(method, url) else self._direct
+            return session.request(method, url, **kwargs)
 
         def get(self, url, **kwargs):
             return self.request("GET", url, **kwargs)
@@ -153,8 +118,6 @@ try:
             return self.request("DELETE", url, **kwargs)
 
     _adapter = _CffiAdapter()
-    if CLOB_PROXY_URL:
-        _adapter._s.proxies = {"https": CLOB_PROXY_URL, "http": CLOB_PROXY_URL}
     _helpers._http_client = _adapter
 except ImportError:
     pass
