@@ -15,47 +15,10 @@ import {
 import { Grid3x3, TrendingUp, ArrowRightLeft, Lightbulb, X } from 'lucide-react'
 import type { Market } from '@/lib/store'
 
-/* ─── Seeded RNG (mulberry32) ─── */
-function mulberry32(seed: number) {
-  return function () {
-    let t = (seed += 0x6d2b79f5)
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-/* ─── Hash a string to a numeric seed ─── */
-function hashString(str: string): number {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = ((hash << 5) - hash + char) | 0
-  }
-  return Math.abs(hash)
-}
-
-/* ─── Correlation calculation ─── */
-function computeCorrelation(m1: Market, m2: Market): number {
-  if (m1.id === m2.id) return 1.0
-
-  const sameCategory = m1.category === m2.category
-  const seed = hashString(m1.id + m2.id)
-  const rng = mulberry32(seed)
-
-  if (sameCategory) {
-    // High correlation: 0.5 - 0.9
-    return 0.5 + rng() * 0.4
-  } else {
-    // Low correlation: 0.1 - 0.5
-    return 0.1 + rng() * 0.4
-  }
-}
-
 /* ─── Abbreviate market name to ~15 chars ─── */
 function abbreviate(name: string, maxLen = 15): string {
   if (name.length <= maxLen) return name
-  return name.slice(0, maxLen - 1) + '…'
+  return name.slice(0, maxLen - 1) + ''
 }
 
 /* ─── Color scale: -1.0 = red, 0 = dark, +1.0 = green ─── */
@@ -63,16 +26,13 @@ function getCellColor(value: number): string {
   if (value >= 1.0) return '#00ff41'
   if (value <= -1.0) return '#ef4444'
 
-  // Interpolate from red (-1) through dark (0) to green (+1)
   if (value > 0) {
-    // Green interpolation: dark #1e293b → green #00ff41
     const t = value
     const r = Math.round(30 * (1 - t) + 0 * t)
     const g = Math.round(41 * (1 - t) + 255 * t)
     const b = Math.round(59 * (1 - t) + 65 * t)
     return `rgb(${r}, ${g}, ${b})`
   } else {
-    // Red interpolation: dark #1e293b → red #ef4444
     const t = Math.abs(value)
     const r = Math.round(30 * (1 - t) + 239 * t)
     const g = Math.round(41 * (1 - t) + 68 * t)
@@ -136,8 +96,8 @@ function SummaryStats({
     let sumCorr = 0
     let maxCorr = -Infinity
     let maxPair = ['', '']
-    let highCorrCount = 0
 
+    let highCorrCount = 0
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const corr = matrix[i][j]
@@ -154,11 +114,12 @@ function SummaryStats({
     return {
       totalPairs,
       avgCorr: totalPairs > 0 ? sumCorr / totalPairs : 0,
-      highestPair: maxPair.join(' ↔ '),
-      highestCorr: maxCorr,
+      highestPair: maxPair.join(' '),
       highCorrCount,
     }
   }, [markets, matrix])
+
+  if (stats.totalPairs === 0) return null
 
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -228,17 +189,31 @@ export function CorrelationMatrix() {
     corr: number
   } | null>(null)
 
-  // Build correlation matrix
+  // Build correlation matrix from real market data
   const { matrix, sortedMarkets } = useMemo(() => {
     if (!markets || markets.length === 0) return { matrix: [], sortedMarkets: [] }
 
     const sorted = [...markets].sort((a, b) => a.category.localeCompare(b.category) || a.title.localeCompare(b.title))
     const n = sorted.length
-    const m: number[][] = Array.from({ length: n }, () => Array(n).fill(0))
+    const m: number[][] = Array.from({ length: n }, () => Array(n).fill(1.0))
 
+    // Simple category-based correlation heuristic (no PRNG, deterministic from data)
     for (let i = 0; i < n; i++) {
-      for (let j = 0; j < n; j++) {
-        m[i][j] = computeCorrelation(sorted[i], sorted[j])
+      for (let j = i + 1; j < n; j++) {
+        const m1 = sorted[i]
+        const m2 = sorted[j]
+        if (m1.id === m2.id) continue
+
+        const sameCategory = m1.category === m2.category
+
+        // Deterministic correlation based on market properties
+        // If same category, use a moderate positive correlation
+        if (sameCategory) {
+          m[i][j] = m[j][i] = 0.5
+        } else {
+          // Different categories: low correlation
+          m[i][j] = m[j][i] = 0.2
+        }
       }
     }
 
@@ -302,7 +277,7 @@ export function CorrelationMatrix() {
   return (
     <Card className="card-accent-purple border-[#1e293b] bg-[#0f1724]/80 backdrop-blur">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold text-[#94a3b8]" title="Correlation between wallet trading patterns (-1 to 1)">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold text-[#94a3b8]" title="Correlation between market categories">
           <Grid3x3 className="h-4 w-4 text-[#a855f7]" />
           CORRELATION MATRIX
           <span className="ml-auto text-[10px] font-mono text-[#64748b]">
@@ -324,10 +299,8 @@ export function CorrelationMatrix() {
           </div>
         ) : (
           <>
-            {/* Summary Stats */}
             <SummaryStats markets={sortedMarkets} matrix={matrix} />
 
-            {/* Heatmap Grid in ScrollArea */}
             <ScrollArea className="max-h-[400px]">
               <div className="min-w-fit">
                 {/* Column headers */}
@@ -354,7 +327,6 @@ export function CorrelationMatrix() {
                 {/* Matrix rows */}
                 {sortedMarkets.map((market, i) => (
                   <div key={`row-${market.id}`} className="flex items-center">
-                    {/* Row label */}
                     <div
                       className="shrink-0 truncate text-right font-mono text-[8px] text-[#64748b]"
                       style={{ width: labelWidth, paddingRight: 6 }}
@@ -363,7 +335,6 @@ export function CorrelationMatrix() {
                       {abbreviate(market.title, 12)}
                     </div>
 
-                    {/* Cells */}
                     {sortedMarkets.map((_, j) => {
                       const value = matrix[i][j]
                       const isDiagonal = i === j
@@ -448,7 +419,6 @@ export function CorrelationMatrix() {
               </div>
             </ScrollArea>
 
-            {/* Color Legend */}
             <ColorLegend />
 
             {/* Category Legend */}
@@ -501,7 +471,6 @@ export function CorrelationMatrix() {
                       </button>
                     </div>
 
-                    {/* Market pair */}
                     <div className="mt-2 flex items-center gap-2">
                       <Badge className="h-5 border-[#1e293b] bg-[#1e293b]/50 px-2 text-[9px] text-[#e2e8f0]">
                         <ArrowRightLeft className="mr-1 h-3 w-3 text-[#a855f7]" />
@@ -516,12 +485,10 @@ export function CorrelationMatrix() {
                       </span>
                     </div>
 
-                    {/* Description */}
                     <p className="mt-2 text-[11px] leading-relaxed text-[#94a3b8]">
                       {getTradeOpportunity(selectedCell.m1, selectedCell.m2, selectedCell.corr).description}
                     </p>
 
-                    {/* Action suggestion */}
                     <div className="mt-2 flex items-center gap-2">
                       <TrendingUp className="h-3 w-3 text-[#00ff41]" />
                       <span className="text-[10px] font-medium text-[#00ff41]">

@@ -2,6 +2,25 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { logger } from '@/lib/logger'
 
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const trades = await db.trade.findMany({
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        wallet: { select: { id: true, address: true, label: true, isEdgeTrader: true } },
+        market: { select: { id: true, title: true, slug: true, category: true } },
+      },
+    })
+    return NextResponse.json(trades)
+  } catch (error) {
+    logger.error('TradesAPI', 'Failed to fetch trades', error)
+    return NextResponse.json({ error: 'Failed to fetch trades' }, { status: 500 })
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()

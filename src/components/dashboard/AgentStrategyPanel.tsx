@@ -32,7 +32,7 @@ const sectionVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.35, ease: 'easeOut' },
+    transition: { duration: 0.35, ease: 'easeOut' as const },
   },
 }
 
@@ -51,7 +51,7 @@ const staggerItem = {
   visible: {
     opacity: 1,
     x: 0,
-    transition: { duration: 0.3, ease: 'easeOut' },
+    transition: { duration: 0.3, ease: 'easeOut' as const },
   },
 }
 
@@ -502,7 +502,6 @@ export function AgentStrategyPanel() {
                   value={strategyParams.maxPositionSize}
                   max={strategyParams.capital}
                   unit=""
-                  prefix="$"
                   color="#22d3ee"
                   icon={Gauge}
                 />

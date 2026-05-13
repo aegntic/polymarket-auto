@@ -1,8 +1,9 @@
 // Polymarket Trading Service
 // Executes real trades on Polygon via viem + Polymarket smart contracts
+// NOTE: This module is lazy-loaded to prevent ABI parsing errors from crashing the dashboard
 
-import { getContract, parseAbi, type WalletClient, type PublicClient } from 'viem'
-import { polygon } from 'wagmi/chains'
+import { createPublicClient, createWalletClient, http, parseAbi, type PublicClient, type WalletClient, type Hash, type Address } from 'viem'
+import { polygon } from 'viem/chains'
 import { logger } from './logger'
 
 // Polymarket smart contract addresses (Polygon mainnet)
@@ -17,24 +18,36 @@ export const CONTRACTS = {
   negRiskExchange: '0xC5d563A36AE78145C45a50134d48A1215220f80a' as const,
 }
 
-// ABIs (simplified - full ABIs would be imported from @polymarket/sdk if available)
-const USDC_ABI = parseAbi([
-  'function approve(address spender, uint256 amount) returns (bool)',
-  'function allowance(address owner, address spender) view returns (uint256)',
-  'function balanceOf(address owner) view returns (uint256)',
-])
+// ABIs — lazy parsed to avoid module-load crashes
+let _USDC_ABI: ReturnType<typeof parseAbi> | null = null
+let _CLOB_ABI: ReturnType<typeof parseAbi> | null = null
 
-const CLOB_ABI = parseAbi([
-  'function createOrder(uint256 marketId, uint8 outcome, uint256 price, uint256 size) returns (uint256)',
-  'function cancelOrder(uint256 orderId) returns (bool)',
-  'function getOrder(uint256 orderId) view returns (tuple(uint256 id, address trader, uint256 marketId, uint8 outcome, uint256 price, uint256 size, uint8 status))',
-])
+function getUSDCABI() {
+  if (!_USDC_ABI) {
+    _USDC_ABI = parseAbi([
+      'function approve(address spender, uint256 amount) returns (bool)',
+      'function allowance(address owner, address spender) view returns (uint256)',
+      'function balanceOf(address owner) view returns (uint256)',
+    ])
+  }
+  return _USDC_ABI
+}
+
+function getCLOBABI() {
+  if (!_CLOB_ABI) {
+    _CLOB_ABI = parseAbi([
+      'function createOrder(uint256 marketId, uint8 outcome, uint256 price, uint256 size) returns (uint256)',
+      'function cancelOrder(uint256 orderId) returns (bool)',
+    ])
+  }
+  return _CLOB_ABI
+}
 
 export interface TradeParams {
-  marketId: string // Condition ID
+  marketId: string
   outcome: 'YES' | 'NO'
-  price: number // Price in USDC (0.01 to 0.99)
-  size: number // Amount in USDC
+  price: number
+  size: number
 }
 
 export interface TradeResult {
@@ -50,18 +63,22 @@ export async function checkAllowance(
   walletClient: WalletClient,
   spender: string = CONTRACTS.negRiskExchange
 ): Promise<bigint> {
-  const contract = getContract({
-    address: CONTRACTS.usdc,
-    abi: USDC_ABI,
-    client: { public: publicClient, waller: walletClient },
-  })
-  
-  const allowance = await contract.read.allowance([
-    walletClient.account!.address,
-    spender as `0x${string}`,
-  ])
-  
-  return allowance as bigint
+  try {
+    const account = walletClient.account
+    if (!account) throw new Error('No wallet account')
+    
+    const allowance = await publicClient.readContract({
+      address: CONTRACTS.usdc as Address,
+      abi: getUSDCABI(),
+      functionName: 'allowance',
+      args: [account.address, spender as Address],
+    })
+    
+    return allowance as bigint
+  } catch (error: any) {
+    logger.error('TradingService', 'Error checking allowance:', error)
+    return BigInt(0)
+  }
 }
 
 // Approve USDC spending
@@ -71,16 +88,17 @@ export async function approveUSDC(
   amount: bigint,
   spender: string = CONTRACTS.negRiskExchange
 ): Promise<string> {
-  const contract = getContract({
-    address: CONTRACTS.usdc,
-    abi: USDC_ABI,
-    client: { public: publicClient, waller: walletClient },
-  })
+  const account = walletClient.account
+  if (!account) throw new Error('No wallet account')
   
-  const hash = await contract.write.approve([
-    spender as `0x${string}`,
-    amount,
-  ])
+  const hash = await walletClient.writeContract({
+    address: CONTRACTS.usdc as Address,
+    abi: getUSDCABI(),
+    functionName: 'approve',
+    args: [spender as Address, amount],
+    account: account.address,
+    chain: polygon,
+  })
   
   return hash
 }
@@ -92,27 +110,21 @@ export async function placeTrade(
   params: TradeParams
 ): Promise<TradeResult> {
   try {
-    // Convert price to wei (6 decimals for USDC)
-    const priceWei = BigInt(Math.round(params.price * 1_000_000))
-    // Convert size to wei
-    const sizeWei = BigInt(Math.round(params.size * 1_000_000))
+    const account = walletClient.account
+    if (!account) throw new Error('No wallet account')
     
-    // Map outcome to number (0 = NO, 1 = YES typically)
+    const priceWei = BigInt(Math.round(params.price * 1_000_000))
+    const sizeWei = BigInt(Math.round(params.size * 1_000_000))
     const outcomeNum = params.outcome === 'YES' ? 1 : 0
     
-    const contract = getContract({
-      address: CONTRACTS.negRiskExchange,
-      abi: CLOB_ABI,
-      client: { public: publicClient, waller: walletClient },
+    const hash = await walletClient.writeContract({
+      address: CONTRACTS.negRiskExchange as Address,
+      abi: getCLOBABI(),
+      functionName: 'createOrder',
+      args: [BigInt(params.marketId), outcomeNum, priceWei, sizeWei],
+      account: account.address,
+      chain: polygon,
     })
-    
-    // Create order
-    const hash = await contract.write.createOrder([
-      BigInt(params.marketId),
-      outcomeNum,
-      priceWei,
-      sizeWei,
-    ])
     
     return {
       success: true,
