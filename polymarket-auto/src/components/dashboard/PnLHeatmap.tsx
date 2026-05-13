@@ -113,7 +113,7 @@ export function PnLHeatmap() {
     }
   }, [allTrades])
 
-  if (error) {
+  if (!allTrades || allTrades.length === 0) {
     return (
       <Card className="card-accent-green border-[#1e293b] bg-[#0f1724]/80 backdrop-blur">
         <CardHeader className="pb-2">

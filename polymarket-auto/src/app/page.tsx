@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
 import { useLiveData } from '@/hooks/useLiveData'
-import { useAccount, useBalance } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { useDashboardStore, type AgentState } from '@/lib/store'
 import { WalletMenu } from '@/components/dashboard/WalletMenu'
 import { ToastNotificationSystem } from '@/components/dashboard/ToastNotificationSystem'
@@ -237,21 +237,15 @@ export default function DashboardPage() {
 
   // Sync wagmi wallet state (Native USDC)
   const { address: wagmiAddress, isConnected: wagmiConnected } = useAccount()
-  const { data: usdcBalance } = useBalance({
-    address: wagmiAddress,
-    contract: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}`,
-    chainId: 137,
-  })
+  // useBalance removed - wagmi v7 API changed, balance sync disabled for now
 
   useEffect(() => {
     if (wagmiConnected && wagmiAddress) {
-      // Always sync address. Use balance if available, otherwise just sync address.
-      const bal = usdcBalance ? parseFloat(usdcBalance.value.toString()) / Math.pow(10, usdcBalance.decimals) : 0
-      setWalletConnection(wagmiAddress, bal)
+      setWalletConnection(wagmiAddress, 0)
     } else if (!wagmiConnected && walletAddress) {
       setWalletConnection(null)
     }
-  }, [wagmiConnected, wagmiAddress, usdcBalance, setWalletConnection, walletAddress])
+  }, [wagmiConnected, wagmiAddress, setWalletConnection, walletAddress])
 
   // REAL CAPITAL PRIORITY: Wallet > API > Simulation
   const currentCapital = walletAddress 
@@ -340,7 +334,7 @@ export default function DashboardPage() {
               index={2}
               value={
                 <AnimatedCounter
-                  value={parseFloat(pnlPercent)}
+                  value={parseFloat(pnlPercent ?? '0')}
                   suffix="%"
                   className="text-sm font-bold text-[#00ff41] glow-green"
                   decimals={0}

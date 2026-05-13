@@ -158,7 +158,7 @@ export function TradeHistoryLog() {
 
   // Sort
   const sorted = useMemo(() => {
-    const copy = [...filtered]
+    const copy = [...filteredTrades]
     copy.sort((a, b) => {
       let cmp = 0
       switch (sortColumn) {
@@ -190,7 +190,7 @@ export function TradeHistoryLog() {
       return sortDir === 'asc' ? cmp : -cmp
     })
     return copy
-  }, [filtered, sortColumn, sortDir])
+  }, [filteredTrades, sortColumn, sortDir])
 
   // Pagination
   const totalItems = sorted.length
@@ -202,16 +202,16 @@ export function TradeHistoryLog() {
 
   // Summary stats
   const stats = useMemo(() => {
-    const totalTrades = filtered.length
-    const totalVolume = filtered.reduce((sum, t) => sum + t.size, 0)
-    const netPnl = filtered.reduce((sum, t) => sum + (t.pnl ?? 0), 0)
-    const agentCount = filtered.filter((t) => t.isAgentTrade).length
+    const totalTrades = filteredTrades.length
+    const totalVolume = filteredTrades.reduce((sum, t) => sum + t.size, 0)
+    const netPnl = filteredTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0)
+    const agentCount = filteredTrades.filter((t) => t.isAgentTrade).length
     const agentPct = totalTrades > 0 ? (agentCount / totalTrades) * 100 : 0
-    const withPnl = filtered.filter((t) => t.pnl !== null)
+    const withPnl = filteredTrades.filter((t) => t.pnl !== null)
     const wins = withPnl.filter((t) => (t.pnl ?? 0) > 0).length
     const winRate = withPnl.length > 0 ? (wins / withPnl.length) * 100 : 0
     return { totalTrades, totalVolume, netPnl, agentPct, winRate }
-  }, [filtered])
+  }, [filteredTrades])
 
   // Sort toggle
   const toggleSort = useCallback((col: SortColumn) => {

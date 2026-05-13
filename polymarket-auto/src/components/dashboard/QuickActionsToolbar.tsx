@@ -107,7 +107,7 @@ export function QuickActionsToolbar() {
         .sort((a: any, b: any) => b.volume - a.volume)
         .slice(0, 3)
 
-      const results = []
+      const results: { market: string; analysis: any }[] = []
       for (const market of topMarkets) {
         const analysis = await fetch('/api/agent-decide', {
           method: 'POST',

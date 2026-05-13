@@ -7,6 +7,8 @@
 # Logs:         docker compose logs -f sports
 # Stop:         docker compose down
 # Metrics:      curl http://localhost:9090/metrics
+#
+# Requires Tor SOCKS5 on host: tor --SocksPort 0.0.0.0:9050
 
 services:
   sports:
@@ -20,6 +22,7 @@ services:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
       POLYMARKET_PRIVATE_KEY: "${POLYMARKET_PRIVATE_KEY:-}"
+      CLOB_PROXY_URL: "socks5://172.17.0.1:9060"
       STEALTH_CATEGORY: sports
     volumes:
       - swarm_brain:/app/data
@@ -36,6 +39,7 @@ services:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
       POLYMARKET_PRIVATE_KEY: "${POLYMARKET_PRIVATE_KEY:-}"
+      CLOB_PROXY_URL: "socks5://172.17.0.1:9060"
       STEALTH_CATEGORY: geopolitics
     volumes:
       - swarm_brain:/app/data
@@ -52,6 +56,7 @@ services:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
       POLYMARKET_PRIVATE_KEY: "${POLYMARKET_PRIVATE_KEY:-}"
+      CLOB_PROXY_URL: "socks5://172.17.0.1:9060"
       STEALTH_CATEGORY: tech
     volumes:
       - swarm_brain:/app/data
@@ -68,6 +73,7 @@ services:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
       POLYMARKET_PRIVATE_KEY: "${POLYMARKET_PRIVATE_KEY:-}"
+      CLOB_PROXY_URL: "socks5://172.17.0.1:9060"
       STEALTH_CATEGORY: weather
     volumes:
       - swarm_brain:/app/data

@@ -50,7 +50,7 @@ interface WalletDetailModalProps {
 }
 
 function generateMockPnlData(totalPnl: number) {
-  const points = []
+  const points: { day: string; pnl: number }[] = []
   const base = 0
   const numPoints = 30
   for (let i = 0; i < numPoints; i++) {

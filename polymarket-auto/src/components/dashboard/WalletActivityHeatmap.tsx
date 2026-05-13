@@ -11,53 +11,6 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const HOUR_LABELS = [0, 3, 6, 9, 12, 15, 18, 21]
 
-// Seeded pseudo-random number generator for consistent data
-function seededRandom(seed: number): () => number {
-  let s = seed
-  return () => {
-    s = (s * 16807 + 0) % 2147483647
-    return (s - 1) / 2147483646
-  }
-}
-
-function generateActivityData(edgeOnly: boolean): number[][] {
-  const seed = edgeOnly ? 42 : 17
-  const rand = seededRandom(seed)
-  const data: number[][] = []
-
-  for (let d = 0; d < 7; d++) {
-    const row: number[] = []
-    for (let h = 0; h < 24; h++) {
-      // Base activity
-      let activity = rand() * 3
-
-      // US market hours boost (13-21 UTC)
-      if (h >= 13 && h <= 21) activity += 5 + rand() * 8
-
-      // European hours boost (8-16 UTC)
-      if (h >= 8 && h <= 16) activity += 2 + rand() * 4
-
-      // Overlap of US + European (13-16 UTC) gets extra boost
-      if (h >= 13 && h <= 16) activity += 1 + rand() * 3
-
-      // Weekend reduction
-      if (d >= 5) activity *= 0.4
-
-      // Edge traders have more concentrated activity peaks
-      if (edgeOnly) {
-        if (h >= 13 && h <= 17) activity *= 1.8
-        else activity *= 0.3
-        // Edge traders are even less active on weekends
-        if (d >= 5) activity *= 0.3
-      }
-
-      row.push(Math.round(activity))
-    }
-    data.push(row)
-  }
-  return data
-}
-
 function getCellColorClass(value: number, max: number): string {
   if (value === 0) return 'bg-[#0f1724]'
   const ratio = max > 0 ? value / max : 0
@@ -70,8 +23,6 @@ function getCellColorClass(value: number, max: number): string {
 function getDayOfWeekIndex(dateStr: string): number {
   const d = new Date(dateStr)
   const jsDay = d.getDay()
-  // getDay() returns 0=Sun, 1=Mon, ... 6=Sat
-  // We need Mon=0, Sun=6
   return jsDay === 0 ? 6 : jsDay - 1
 }
 
@@ -79,8 +30,6 @@ interface TooltipData {
   day: string
   hour: number
   count: number
-  x: number
-  y: number
 }
 
 export function WalletActivityHeatmap() {
@@ -114,14 +63,12 @@ export function WalletActivityHeatmap() {
     return result
   }, [liveTrades, apiTrades])
 
-  // Build heatmap data combining API data with simulated patterns
+  // Build heatmap from real trade data only
   const { heatmapData, maxValue, stats } = useMemo(() => {
-    // Start with simulated base data
-    const simulated = generateActivityData(edgeOnly)
+    // Start with zeros
+    const data: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0))
 
-    // Overlay real trade data on top
-    const data = simulated.map((row) => [...row])
-
+    // Overlay real trade data
     for (const trade of allTrades) {
       if (edgeOnly && trade.wallet && !trade.wallet.isEdgeTrader) continue
       const dayIdx = getDayOfWeekIndex(trade.createdAt)
@@ -141,7 +88,6 @@ export function WalletActivityHeatmap() {
       }
     }
 
-    // Find peak hour
     const hourTotals = Array(24).fill(0)
     for (let h = 0; h < 24; h++) {
       for (let d = 0; d < 7; d++) {
@@ -150,7 +96,6 @@ export function WalletActivityHeatmap() {
     }
     const peakHour = hourTotals.indexOf(Math.max(...hourTotals))
 
-    // Find peak day
     const dayTotals = Array(7).fill(0)
     for (let d = 0; d < 7; d++) {
       for (let h = 0; h < 24; h++) {
@@ -159,7 +104,6 @@ export function WalletActivityHeatmap() {
     }
     const peakDayIdx = dayTotals.indexOf(Math.max(...dayTotals))
 
-    // Activity concentration: % of activity in top 20% of time slots
     const allValues = data.flat().sort((a, b) => b - a)
     const top20Count = Math.ceil(allValues.length * 0.2)
     const top20Sum = allValues.slice(0, top20Count).reduce((a, b) => a + b, 0)
@@ -188,8 +132,6 @@ export function WalletActivityHeatmap() {
           day: DAYS[dayIdx],
           hour,
           count: heatmapData[dayIdx][hour],
-          x: rect.left - parentRect.left + rect.width / 2,
-          y: rect.top - parentRect.top - 4,
         })
       }
     },
@@ -225,9 +167,7 @@ export function WalletActivityHeatmap() {
               <Clock className="h-4 w-4 text-cyan-400" />
               WALLET ACTIVITY HEATMAP
             </CardTitle>
-            <p className="mt-1 text-[10px] text-[#64748b]">
-              Trading activity by hour and day
-            </p>
+            <p className="mt-1 text-[10px] text-[#64748b]">Trading activity by hour and day</p>
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -265,31 +205,22 @@ export function WalletActivityHeatmap() {
           </div>
         ) : (
           <>
-            {/* Heatmap Grid */}
             <div className="heatmap-container relative overflow-x-auto pb-1">
-              {/* X-axis labels */}
               <div className="grid gap-[2px] pl-[30px]" style={{ gridTemplateColumns: `repeat(24, 16px)` }}>
                 {HOURS.map((h) => (
                   <div
                     key={h}
-                    className={`text-center text-[8px] text-[#64748b] ${
-                      HOUR_LABELS.includes(h) ? 'opacity-100' : 'opacity-0'
-                    }`}
+                    className={`text-center text-[8px] text-[#64748b] ${HOUR_LABELS.includes(h) ? 'opacity-100' : 'opacity-0'}`}
                   >
                     {HOUR_LABELS.includes(h) ? h : ''}
                   </div>
                 ))}
               </div>
 
-              {/* Grid rows */}
               <div className="space-y-[2px]">
                 {DAYS.map((day, dayIdx) => (
                   <div key={day} className="flex items-center gap-0">
-                    {/* Y-axis label */}
-                    <div className="w-[30px] shrink-0 text-[9px] text-[#64748b] text-right pr-1.5">
-                      {day}
-                    </div>
-                    {/* Cells */}
+                    <div className="w-[30px] shrink-0 text-[9px] text-[#64748b] text-right pr-1.5">{day}</div>
                     <div className="grid gap-[2px]" style={{ gridTemplateColumns: `repeat(24, 16px)` }}>
                       {HOURS.map((hour) => {
                         const value = heatmapData[dayIdx][hour]
@@ -307,14 +238,10 @@ export function WalletActivityHeatmap() {
                 ))}
               </div>
 
-              {/* Tooltip */}
               {tooltip && (
                 <div
                   className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-md border border-[#1e293b] bg-[#0a0e17]/95 px-2 py-1.5 shadow-lg backdrop-blur-sm"
-                  style={{
-                    left: `${tooltip.x}px`,
-                    top: `${tooltip.y}px`,
-                  }}
+                  style={{ left: '50%', top: '50%' }}
                 >
                   <div className="text-[9px] font-mono text-cyan-400">
                     {tooltip.day} {tooltip.hour}:00-{tooltip.hour + 1 > 23 ? 0 : tooltip.hour + 1}:00
@@ -326,7 +253,6 @@ export function WalletActivityHeatmap() {
               )}
             </div>
 
-            {/* Color scale legend */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-[9px] text-[#64748b]">Less</span>
@@ -344,35 +270,21 @@ export function WalletActivityHeatmap() {
               </span>
             </div>
 
-            {/* Summary Stats Row */}
             <div className="flex items-center justify-between rounded-lg border border-[#1e293b] bg-[#0a0e17]/80 px-3 py-2.5">
               <div className="flex items-center gap-4">
                 <div>
                   <div className="text-[9px] text-[#64748b]">Peak Hour</div>
-                  <div className="font-mono text-xs font-bold text-cyan-400 glow-cyan">
-                    {stats.peakHour}:00 UTC
-                  </div>
+                  <div className="font-mono text-xs font-bold text-cyan-400 glow-cyan">{stats.peakHour}:00 UTC</div>
                 </div>
                 <div className="h-8 w-px bg-[#1e293b]" />
                 <div>
                   <div className="text-[9px] text-[#64748b]">Peak Day</div>
-                  <div className="font-mono text-xs font-bold text-[#00ff41]">
-                    {stats.peakDay}
-                  </div>
+                  <div className="font-mono text-xs font-bold text-[#00ff41]">{stats.peakDay}</div>
                 </div>
                 <div className="h-8 w-px bg-[#1e293b]" />
                 <div>
                   <div className="text-[9px] text-[#64748b]">Total Activity</div>
-                  <div className="font-mono text-xs font-bold text-[#e2e8f0]">
-                    {stats.totalActivity.toLocaleString()}
-                  </div>
-                </div>
-                <div className="h-8 w-px bg-[#1e293b] hide-mobile" />
-                <div className="hide-mobile">
-                  <div className="text-[9px] text-[#64748b]">Concentration</div>
-                  <div className="font-mono text-xs font-bold text-[#f59e0b]">
-                    {stats.concentration}% in top 20%
-                  </div>
+                  <div className="font-mono text-xs font-bold text-[#e2e8f0]">{stats.totalActivity.toLocaleString()}</div>
                 </div>
               </div>
             </div>

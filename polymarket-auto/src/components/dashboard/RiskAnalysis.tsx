@@ -99,7 +99,7 @@ function runMonteCarlo(
   }
 
   // Calculate percentiles per day
-  const result = []
+  const result: { day: string; p25: number; p50: number; p75: number }[] = []
   for (let d = 0; d <= days; d++) {
     const values = simulations.map((s) => s[d]).sort((a, b) => a - b)
     const p25 = values[Math.floor(paths * 0.25)]
@@ -134,7 +134,8 @@ export function RiskAnalysis() {
   const agent = agentData?.state
 
   const metrics = useMemo(() => {
-    if (!agent || !Array.isArray(performance) || performance.length < 2) return null
+    const series = Array.isArray(performance) ? performance : (performance?.series ?? [])
+    if (!agent || series.length < 2) return null
 
     const maxDrawdown = agent.maxDrawdown ?? 0
 
@@ -143,10 +144,10 @@ export function RiskAnalysis() {
 
     // Compute Sortino ratio from performance data
     const returns: number[] = []
-    for (let i = 1; i < performance.length; i++) {
-      const prevCap = performance[i - 1].capital
+    for (let i = 1; i < series.length; i++) {
+      const prevCap = series[i - 1].capital
       if (prevCap && prevCap > 0) {
-        const ret = (performance[i].capital - prevCap) / prevCap
+        const ret = (series[i].capital - prevCap) / prevCap
         returns.push(ret)
       }
     }
@@ -160,7 +161,7 @@ export function RiskAnalysis() {
     const sortino = Math.min(sortinoRaw, 99.9)
 
     // VaR (95%) - use the 95th percentile of drawdowns
-    const drawdowns = performance.map((p) => p.drawdown).sort((a, b) => b - a)
+    const drawdowns = series.map((p) => p.drawdown).sort((a, b) => b - a)
     const var95Index = Math.floor(drawdowns.length * 0.05)
     const var95 = drawdowns[var95Index] ?? 0
 
@@ -193,8 +194,9 @@ export function RiskAnalysis() {
   }, [agent, performance])
 
   const drawdownData = useMemo(() => {
-    if (!performance) return []
-    return performance.map((p) => ({
+    const series = Array.isArray(performance) ? performance : (performance?.series ?? [])
+    if (series.length === 0) return []
+    return series.map((p) => ({
       time: new Date(p.timestamp).toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',

@@ -677,9 +677,12 @@ def format_wallet_block(wallet: Dict, analysis: Dict) -> str:
     lines.append(f"WALLET: 0x{wallet['address'] if not wallet['address'].startswith('0x') else wallet['address'][2:]}")
     lines.append(f"TIER: {wallet['tier']}")
     lines.append(f"SCORE: {wallet['total_score']}")
-    lines.append(f"PRIMARY EDGE: LAYER 1 + LAYER {max(
-        range(2, 6), key=lambda i: wallet[f'l{i}_score']
-    ) if wallet['total_score'] > 0 else '3'}")
+    primary_layer = (
+        max(range(2, 6), key=lambda i: wallet[f"l{i}_score"])
+        if wallet["total_score"] > 0
+        else "3"
+    )
+    lines.append(f"PRIMARY EDGE: LAYER 1 + LAYER {primary_layer}")
     lines.append(f"FUNDING_SOURCE: {wallet.get('funding_source') or 'unknown'} ({wallet.get('funding_label', 'unknown')})")
     lines.append(f"OBSCURE_WIN_RATE: {wallet['obscure_win_rate']:.0%}")
     lines.append(f"STEALTH_LEVEL: {'HIGH' if wallet['total_score'] >= 70 else 'MEDIUM' if wallet['total_score'] >= 50 else 'LOW'}")
