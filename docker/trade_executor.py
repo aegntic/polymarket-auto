@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """
-PolyAgent Trade Executor — CLOB Trading Engine (v2)
+PolyAgent Trade Executor — CLOB Trading Engine (v3)
 ====================================================
-Executes trades on Polymarket CLOB via the official py-clob-client SDK.
-Uses EIP-712 signed orders through the REST API — no direct contract calls.
-
-Contracts (Polygon mainnet):
-  USDC (native):      0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359
-  CTF Exchange:       0x4D97DCd97eC945f40cF65F87097ACe5EA0476045
-  NegRisk CLOB:       0xC5d563A36AE78145C45a50134d48A1215220f80a
+Uses py-clob-client-v2 (official Polymarket V2 SDK).
+Routes order POSTs through Tor SOCKS5 to bypass Cloudflare geo-block.
 
 Usage:
     python3 trade_executor.py --private-key 0x... --condition-id 0x... --outcome YES --price 0.55 --size 10
@@ -16,7 +11,7 @@ Usage:
 Env vars:
     POLYGON_RPC_URL        — Polygon RPC endpoint
     POLYMARKET_PRIVATE_KEY — wallet private key
-    CLOB_PROXY_URL         — SOCKS5 proxy (e.g. socks5://localhost:9051 for Tor)
+    CLOB_PROXY_URL         — SOCKS5 proxy for geo-blocked endpoints (e.g. socks5://172.17.0.1:9050)
 """
 
 import json
@@ -26,9 +21,6 @@ import socket
 import time
 from typing import Optional
 
-# ============================================================================
-# DNS Hijack Bypass (ACMA / Australian ISP)
-# ============================================================================
 DNS_OVERRIDES = {
     "clob.polymarket.com": "104.18.34.205",
     "gamma-api.polymarket.com": "104.18.34.205",
@@ -52,17 +44,17 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from py_clob_client.client import ClobClient
-    from py_clob_client.clob_types import OrderArgs
-    from py_clob_client.constants import POLYGON
-    from py_clob_client.order_builder.constants import BUY, SELL
+    from py_clob_client_v2 import (
+        ClobClient as V2ClobClient,
+        OrderArgs as V2OrderArgs,
+        Side,
+        OrderType,
+        PartialCreateOrderOptions,
+    )
 except ImportError:
-    print("ERROR: pip install py-clob-client")
+    print("ERROR: pip install py-clob-client-v2")
     sys.exit(1)
 
-# ============================================================================
-# Contracts
-# ============================================================================
 USDC_ADDRESS = Web3.to_checksum_address("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359")
 
 USDC_ABI = json.loads(
@@ -78,10 +70,11 @@ TOR_PROXY_ENDPOINTS = {
     "/cancel-order",
     "/cancel-all",
     "/cancel-orders-by-market",
+    "/post-orders",
 }
 
 try:
-    from py_clob_client.http_helpers import helpers as _helpers
+    from py_clob_client_v2.http_helpers import helpers as _helpers
     from curl_cffi import requests as cffi_requests
 
     class _CffiAdapter:
@@ -124,7 +117,7 @@ except ImportError:
 
 
 class TradeExecutor:
-    """Autonomous CLOB trade executor using py-clob-client SDK."""
+    """Autonomous CLOB trade executor using py-clob-client-v2."""
 
     def __init__(self, private_key: str):
         if not private_key or not private_key.startswith("0x"):
@@ -135,20 +128,22 @@ class TradeExecutor:
         self.account = self.w3.eth.account.from_key(private_key)
         self.address = self.account.address
 
-        # USDC contract for balance queries
         self.usdc = self.w3.eth.contract(address=USDC_ADDRESS, abi=USDC_ABI)
 
-        # CLOB client — with retry for Tor bootstrap
         for attempt in range(10):
             try:
-                self.clob = ClobClient(
+                self.clob = V2ClobClient(
                     host=CLOB_API_URL,
                     key=private_key,
-                    chain_id=POLYGON,
-                    signature_type=0,
-                    funder=self.address,
+                    chain_id=137,
                 )
-                self.clob.set_api_creds(self.clob.create_or_derive_api_creds())
+                creds = self.clob.create_or_derive_api_key()
+                self.clob = V2ClobClient(
+                    host=CLOB_API_URL,
+                    key=private_key,
+                    chain_id=137,
+                    creds=creds,
+                )
                 break
             except Exception as e:
                 if attempt < 9:
@@ -156,11 +151,8 @@ class TradeExecutor:
                 else:
                     raise
 
-        self._market_cache: dict[str, dict] = {}
+        self._tick_cache: dict[str, str] = {}
 
-    # ------------------------------------------------------------------
-    # Balance
-    # ------------------------------------------------------------------
     def get_balance(self) -> float:
         balance = self.usdc.functions.balanceOf(self.address).call()
         return balance / 1e6
@@ -171,20 +163,23 @@ class TradeExecutor:
     def approve_usdc(self, amount_usdc: float) -> Optional[str]:
         return "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    # ------------------------------------------------------------------
-    # Market data
-    # ------------------------------------------------------------------
-    def _get_token_id(self, condition_id: str, outcome: str) -> str:
-        if condition_id not in self._market_cache:
-            market = self.clob.get_market(condition_id=condition_id)
-            if not market:
-                raise ValueError(f"Market not found: {condition_id}")
-            self._market_cache[condition_id] = market
+    def _get_tick_size(self, token_id: str) -> str:
+        if token_id not in self._tick_cache:
+            resp = self.clob.get_tick_size(token_id=token_id)
+            if isinstance(resp, dict):
+                self._tick_cache[token_id] = str(resp.get("tick_size", "0.01"))
+            else:
+                self._tick_cache[token_id] = "0.01"
+        return self._tick_cache[token_id]
 
-        market = self._market_cache[condition_id]
+    def _get_token_id(self, condition_id: str, outcome: str) -> str:
+        market = self.clob.get_market(condition_id=condition_id)
+        if not market:
+            raise ValueError(f"Market not found: {condition_id}")
         outcome_label = "Yes" if outcome.upper() == "YES" else "No"
+        tokens = market.get("tokens", []) if isinstance(market, dict) else []
         token = next(
-            (t for t in market.get("tokens", []) if t.get("outcome") == outcome_label),
+            (t for t in tokens if t.get("outcome") == outcome_label),
             None,
         )
         if not token:
@@ -193,9 +188,6 @@ class TradeExecutor:
             )
         return token["token_id"]
 
-    # ------------------------------------------------------------------
-    # Trading
-    # ------------------------------------------------------------------
     def place_order(
         self,
         condition_id: str,
@@ -203,7 +195,6 @@ class TradeExecutor:
         price: float,
         size_usdc: float,
     ) -> dict:
-        """Place a limit order on Polymarket CLOB. Returns {success, tx_hash, error}."""
         if not self.w3.is_connected():
             return {"success": False, "error": "RPC not connected"}
 
@@ -213,17 +204,20 @@ class TradeExecutor:
                 1, int(size_usdc / price) if price > 0 else int(size_usdc)
             )
             price = max(0.01, price)
+            tick_size = self._get_tick_size(token_id)
 
-            order_args = OrderArgs(
-                price=price,
-                size=size_shares,
-                side=BUY,
-                token_id=token_id,
+            resp = self.clob.create_and_post_order(
+                order_args=V2OrderArgs(
+                    token_id=token_id,
+                    price=price,
+                    size=size_shares,
+                    side=Side.BUY,
+                ),
+                options=PartialCreateOrderOptions(tick_size=tick_size),
+                order_type=OrderType.GTC,
             )
-            signed = self.clob.create_order(order_args)
-            resp = self.clob.post_order(signed)
 
-            if resp and resp.get("success"):
+            if resp and (resp.get("success") or resp.get("orderID")):
                 return {
                     "success": True,
                     "tx_hash": resp.get("transactionHash", "clob_api"),
@@ -246,9 +240,6 @@ class TradeExecutor:
         return self.place_order(condition_id, "NO", price, size)
 
 
-# ============================================================================
-# CLI
-# ============================================================================
 if __name__ == "__main__":
     import argparse
 
