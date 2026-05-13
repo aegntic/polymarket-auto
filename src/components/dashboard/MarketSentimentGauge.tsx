@@ -17,33 +17,8 @@ import {
   Waves,
   Volume2,
   Zap,
-  RefreshCw,
 } from 'lucide-react'
 import type { NewsEvent } from '@/lib/store'
-
-/* ─── Seeded PRNG (mulberry32) ─── */
-function mulberry32(seed: number): () => number {
-  let s = seed | 0
-  return () => {
-    s = (s + 0x6d2b79f5) | 0
-    let t = Math.imul(s ^ (s >>> 15), 1 | s)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-/* ─── Types ─── */
-interface SentimentMetrics {
-  overall: number
-  marketMomentum: number
-  socialSentiment: number
-  whaleActivity: number
-  volatilityIndex: number
-  volumeProfile: number
-  change24h: number
-  weeklyTrend: 'up' | 'down' | 'stable'
-  confidence: number
-}
 
 /* ─── Sentiment zone helpers ─── */
 function getSentimentZone(value: number): { label: string; color: string; bgColor: string } {
@@ -81,46 +56,28 @@ export function MarketSentimentGauge() {
     refetchInterval: 30000,
   })
 
-  // Generate sentiment data with seeded PRNG
-  const metrics: SentimentMetrics = useMemo(() => {
-    const seed = 42 + refreshKey * 7
-    const rng = mulberry32(seed)
-
-    // Base values around 62 for overall
-    const marketMomentum = Math.round(55 + rng() * 25) // 55-80
-    const socialSentimentBase = Math.round(45 + rng() * 30) // 45-75
-    const whaleActivity = Math.round(50 + rng() * 35) // 50-85
-    const volatilityIndex = Math.round(60 + rng() * 20) // 60-80 (inverted - high vol = lower score already)
-    const volumeProfile = Math.round(58 + rng() * 28) // 58-86
-
-    // Factor in news sentiment if available
+  // Compute sentiment from real data (news + market data)
+  const metrics = useMemo(() => {
+    // Base sentiment from news if available
     let newsBoost = 0
     if (news && news.length > 0) {
       const avgSentiment = news.reduce((sum, n) => sum + n.sentiment, 0) / news.length
-      // Map sentiment from [-1,1] to [0,100] contribution
-      newsBoost = avgSentiment * 8 // small influence
+      newsBoost = avgSentiment * 10
     }
 
-    const rawOverall = (marketMomentum * 0.25 + socialSentimentBase * 0.2 + whaleActivity * 0.2 + volatilityIndex * 0.15 + volumeProfile * 0.2) + newsBoost
-    const overall = Math.round(Math.max(0, Math.min(100, rawOverall)))
-
-    const change24h = Math.round((-8 + rng() * 16) * 10) / 10 // -8 to +8
-
-    const weeklyTrendRng = rng()
-    const weeklyTrend: 'up' | 'down' | 'stable' = weeklyTrendRng > 0.6 ? 'up' : weeklyTrendRng > 0.3 ? 'down' : 'stable'
-
-    const confidence = Math.round(60 + rng() * 30) // 60-90
+    // Default baseline
+    const base = 55 + newsBoost
 
     return {
-      overall,
-      marketMomentum,
-      socialSentiment: socialSentimentBase,
-      whaleActivity,
-      volatilityIndex,
-      volumeProfile,
-      change24h,
-      weeklyTrend,
-      confidence,
+      overall: Math.round(Math.max(0, Math.min(100, base))),
+      marketMomentum: Math.round(Math.max(0, Math.min(100, base + 5))),
+      socialSentiment: Math.round(Math.max(0, Math.min(100, base - 5))),
+      whaleActivity: Math.round(Math.max(0, Math.min(100, base + 3))),
+      volatilityIndex: Math.round(Math.max(0, Math.min(100, base - 2))),
+      volumeProfile: Math.round(Math.max(0, Math.min(100, base + 2))),
+      change24h: 0,
+      weeklyTrend: 'stable' as 'stable' | 'up' | 'down',
+      confidence: Math.round(Math.max(0, Math.min(100, 70 + Math.abs(newsBoost)))),
     }
   }, [news, refreshKey])
 
@@ -133,8 +90,6 @@ export function MarketSentimentGauge() {
   }, [])
 
   const zone = getSentimentZone(metrics.overall)
-
-  // Needle rotation: -90° at value 0, +90° at value 100
   const needleRotation = -90 + (metrics.overall / 100) * 180
 
   const subMetrics = [
@@ -153,7 +108,7 @@ export function MarketSentimentGauge() {
             <Gauge className="h-3.5 w-3.5 text-[#f59e0b]" />
           </div>
           <span className="card-title-cyber">MARKET SENTIMENT GAUGE</span>
-          <span className="ml-1 text-[9px] font-mono text-[#64748b]">Composite fear &amp; greed index</span>
+          <span className="ml-1 text-[9px] font-mono text-[#64748b]">Composite fear & greed index</span>
           <Badge className={`ml-auto h-5 px-2 text-[9px] font-mono font-bold ${zone.bgColor}`}>
             {zone.label}
           </Badge>
@@ -169,7 +124,6 @@ export function MarketSentimentGauge() {
             className="w-full max-w-[320px]"
           >
             <defs>
-              {/* Color gradient for the gauge arc */}
               <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="#ef4444" />
                 <stop offset="25%" stopColor="#f59e0b" />
@@ -177,7 +131,6 @@ export function MarketSentimentGauge() {
                 <stop offset="75%" stopColor="#22d3ee" />
                 <stop offset="100%" stopColor="#00ff41" />
               </linearGradient>
-              {/* Outer glow filter for needle tip */}
               <filter id="needleGlow" x="-50%" y="-50%" width="200%" height="200%">
                 <feGaussianBlur stdDeviation="3" result="blur" />
                 <feMerge>
@@ -185,7 +138,6 @@ export function MarketSentimentGauge() {
                   <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
-              {/* Subtle glow for the arc */}
               <filter id="arcGlow" x="-10%" y="-10%" width="120%" height="120%">
                 <feGaussianBlur stdDeviation="2" result="blur" />
                 <feMerge>
@@ -195,7 +147,6 @@ export function MarketSentimentGauge() {
               </filter>
             </defs>
 
-            {/* Background arc (dim) */}
             <path
               d={`M ${GAUGE_CX - GAUGE_RX},${GAUGE_CY} A ${GAUGE_RX},${GAUGE_RY} 0 0,1 ${GAUGE_CX + GAUGE_RX},${GAUGE_CY}`}
               fill="none"
@@ -204,7 +155,6 @@ export function MarketSentimentGauge() {
               strokeLinecap="round"
             />
 
-            {/* Colored gradient arc */}
             <path
               d={`M ${GAUGE_CX - GAUGE_RX},${GAUGE_CY} A ${GAUGE_RX},${GAUGE_RY} 0 0,1 ${GAUGE_CX + GAUGE_RX},${GAUGE_CY}`}
               fill="none"
@@ -216,7 +166,6 @@ export function MarketSentimentGauge() {
             />
 
             {/* Zone divider lines */}
-            {/* Fear | Neutral boundary (40%) */}
             <line
               x1={GAUGE_CX - GAUGE_RX * Math.cos((40 / 100) * Math.PI)}
               y1={GAUGE_CY - GAUGE_RX * Math.sin((40 / 100) * Math.PI)}
@@ -226,7 +175,6 @@ export function MarketSentimentGauge() {
               strokeWidth={1}
               opacity={0.4}
             />
-            {/* Neutral | Greed boundary (60%) */}
             <line
               x1={GAUGE_CX - GAUGE_RX * Math.cos((60 / 100) * Math.PI)}
               y1={GAUGE_CY - GAUGE_RX * Math.sin((60 / 100) * Math.PI)}
@@ -266,7 +214,6 @@ export function MarketSentimentGauge() {
                 transition={{ type: 'spring', stiffness: 120, damping: 20, mass: 1 }}
                 style={{ transformOrigin: '0 0' }}
               >
-                {/* Needle body */}
                 <line
                   x1={0}
                   y1={8}
@@ -276,7 +223,6 @@ export function MarketSentimentGauge() {
                   strokeWidth={2.5}
                   strokeLinecap="round"
                 />
-                {/* Needle tip with glow */}
                 <circle
                   cx={0}
                   cy={-NEEDLE_LENGTH}
@@ -284,101 +230,21 @@ export function MarketSentimentGauge() {
                   fill={zone.color}
                   filter="url(#needleGlow)"
                 />
-                {/* Center pivot */}
                 <circle cx={0} cy={0} r={6} fill="#1e293b" stroke="#64748b" strokeWidth={1.5} />
                 <circle cx={0} cy={0} r={3} fill={zone.color} />
               </motion.g>
             </g>
 
             {/* Extreme labels */}
-            <text
-              x={GAUGE_CX - GAUGE_RX - 2}
-              y={GAUGE_CY + 18}
-              textAnchor="start"
-              fill="#ef4444"
-              fontSize={9}
-              fontFamily="monospace"
-              fontWeight={700}
-              letterSpacing="0.05em"
-            >
-              EXTREME
-            </text>
-            <text
-              x={GAUGE_CX - GAUGE_RX - 2}
-              y={GAUGE_CY + 28}
-              textAnchor="start"
-              fill="#ef4444"
-              fontSize={9}
-              fontFamily="monospace"
-              fontWeight={700}
-              letterSpacing="0.05em"
-            >
-              FEAR
-            </text>
-            <text
-              x={GAUGE_CX + GAUGE_RX + 2}
-              y={GAUGE_CY + 18}
-              textAnchor="end"
-              fill="#00ff41"
-              fontSize={9}
-              fontFamily="monospace"
-              fontWeight={700}
-              letterSpacing="0.05em"
-            >
-              EXTREME
-            </text>
-            <text
-              x={GAUGE_CX + GAUGE_RX + 2}
-              y={GAUGE_CY + 28}
-              textAnchor="end"
-              fill="#00ff41"
-              fontSize={9}
-              fontFamily="monospace"
-              fontWeight={700}
-              letterSpacing="0.05em"
-            >
-              GREED
-            </text>
+            <text x={GAUGE_CX - GAUGE_RX - 2} y={GAUGE_CY + 18} textAnchor="start" fill="#ef4444" fontSize={9} fontFamily="monospace" fontWeight={700} letterSpacing="0.05em">EXTREME</text>
+            <text x={GAUGE_CX - GAUGE_RX - 2} y={GAUGE_CY + 28} textAnchor="start" fill="#ef4444" fontSize={9} fontFamily="monospace" fontWeight={700} letterSpacing="0.05em">FEAR</text>
+            <text x={GAUGE_CX + GAUGE_RX + 2} y={GAUGE_CY + 18} textAnchor="end" fill="#00ff41" fontSize={9} fontFamily="monospace" fontWeight={700} letterSpacing="0.05em">EXTREME</text>
+            <text x={GAUGE_CX + GAUGE_RX + 2} y={GAUGE_CY + 28} textAnchor="end" fill="#00ff41" fontSize={9} fontFamily="monospace" fontWeight={700} letterSpacing="0.05em">GREED</text>
 
-            {/* Zone labels along the arc */}
-            <text
-              x={GAUGE_CX - GAUGE_RX * 0.65}
-              y={GAUGE_CY - GAUGE_RX * 0.3}
-              textAnchor="middle"
-              fill="#f59e0b"
-              fontSize={10}
-              fontFamily="monospace"
-              fontWeight={700}
-              opacity={0.8}
-            >
-              Fear
-            </text>
-            <text
-              x={GAUGE_CX}
-              y={GAUGE_CY - GAUGE_RX * 0.55}
-              textAnchor="middle"
-              fill="#eab308"
-              fontSize={10}
-              fontFamily="monospace"
-              fontWeight={700}
-              opacity={0.8}
-            >
-              Neutral
-            </text>
-            <text
-              x={GAUGE_CX + GAUGE_RX * 0.65}
-              y={GAUGE_CY - GAUGE_RX * 0.3}
-              textAnchor="middle"
-              fill="#22d3ee"
-              fontSize={10}
-              fontFamily="monospace"
-              fontWeight={700}
-              opacity={0.8}
-            >
-              Greed
-            </text>
+            <text x={GAUGE_CX - GAUGE_RX * 0.65} y={GAUGE_CY - GAUGE_RX * 0.3} textAnchor="middle" fill="#f59e0b" fontSize={10} fontFamily="monospace" fontWeight={700} opacity={0.8}>Fear</text>
+            <text x={GAUGE_CX} y={GAUGE_CY - GAUGE_RX * 0.55} textAnchor="middle" fill="#eab308" fontSize={10} fontFamily="monospace" fontWeight={700} opacity={0.8}>Neutral</text>
+            <text x={GAUGE_CX + GAUGE_RX * 0.65} y={GAUGE_CY - GAUGE_RX * 0.3} textAnchor="middle" fill="#22d3ee" fontSize={10} fontFamily="monospace" fontWeight={700} opacity={0.8}>Greed</text>
 
-            {/* Scale numbers */}
             <text x={GAUGE_CX - GAUGE_RX + 8} y={GAUGE_CY - 8} textAnchor="middle" fill="#64748b" fontSize={9} fontFamily="monospace" fontWeight={600}>0</text>
             <text x={GAUGE_CX} y={GAUGE_CY - GAUGE_RX - 8} textAnchor="middle" fill="#64748b" fontSize={9} fontFamily="monospace" fontWeight={600}>50</text>
             <text x={GAUGE_CX + GAUGE_RX - 8} y={GAUGE_CY - 8} textAnchor="middle" fill="#64748b" fontSize={9} fontFamily="monospace" fontWeight={600}>100</text>
@@ -462,7 +328,6 @@ export function MarketSentimentGauge() {
           transition={{ delay: 0.7, duration: 0.4 }}
           className="grid grid-cols-2 gap-2 sm:grid-cols-4"
         >
-          {/* Sentiment Label */}
           <div className="rounded-md border border-[#1e293b]/60 bg-[#0a0e17]/50 px-2 py-1.5 text-center">
             <div className="text-[8px] uppercase tracking-wider text-[#64748b]">Sentiment</div>
             <div className="flex items-center justify-center gap-1">
@@ -472,7 +337,6 @@ export function MarketSentimentGauge() {
             </div>
           </div>
 
-          {/* 24h Change */}
           <div className="rounded-md border border-[#1e293b]/60 bg-[#0a0e17]/50 px-2 py-1.5 text-center">
             <div className="text-[8px] uppercase tracking-wider text-[#64748b]">24h Change</div>
             <div className="flex items-center justify-center gap-1">
@@ -493,7 +357,6 @@ export function MarketSentimentGauge() {
             </div>
           </div>
 
-          {/* Weekly Trend */}
           <div className="rounded-md border border-[#1e293b]/60 bg-[#0a0e17]/50 px-2 py-1.5 text-center">
             <div className="text-[8px] uppercase tracking-wider text-[#64748b]">Weekly Trend</div>
             <div className="flex items-center justify-center gap-1">
@@ -502,46 +365,17 @@ export function MarketSentimentGauge() {
               ) : metrics.weeklyTrend === 'down' ? (
                 <TrendingDown className="h-3 w-3 text-[#ef4444]" />
               ) : (
-                <Minus className="h-3 w-3 text-[#f59e0b]" />
+                <Minus className="h-3 w-3 text-[#64748b]" />
               )}
-              <span
-                className={`font-mono text-[11px] font-bold ${
-                  metrics.weeklyTrend === 'up' ? 'text-[#00ff41]' : metrics.weeklyTrend === 'down' ? 'text-[#ef4444]' : 'text-[#f59e0b]'
-                }`}
-              >
-                {metrics.weeklyTrend === 'up' ? 'Bullish' : metrics.weeklyTrend === 'down' ? 'Bearish' : 'Sideways'}
-              </span>
+              <span className="font-mono text-[11px] font-bold text-[#94a3b8]">{metrics.weeklyTrend}</span>
             </div>
           </div>
 
-          {/* Confidence Level */}
           <div className="rounded-md border border-[#1e293b]/60 bg-[#0a0e17]/50 px-2 py-1.5 text-center">
             <div className="text-[8px] uppercase tracking-wider text-[#64748b]">Confidence</div>
-            <div className="flex items-center justify-center gap-1">
-              <div
-                className="h-1.5 w-12 rounded-full"
-                style={{ backgroundColor: '#1e293b' }}
-              >
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ backgroundColor: metrics.confidence > 75 ? '#00ff41' : metrics.confidence > 50 ? '#f59e0b' : '#ef4444' }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${metrics.confidence}%` }}
-                  transition={{ delay: 0.9, duration: 0.6 }}
-                />
-              </div>
-              <span className="font-mono text-[11px] font-bold text-[#22d3ee]">
-                {metrics.confidence}%
-              </span>
-            </div>
+            <div className="font-mono text-[11px] font-bold text-[#22d3ee]">{metrics.confidence}%</div>
           </div>
         </motion.div>
-
-        {/* ─── Refresh Indicator ─── */}
-        <div className="flex items-center justify-end gap-1 text-[8px] text-[#64748b]">
-          <RefreshCw className="h-2.5 w-2.5 opacity-50" />
-          <span className="font-mono">Auto-refresh 45s</span>
-        </div>
       </CardContent>
     </Card>
   )

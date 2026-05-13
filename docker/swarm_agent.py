@@ -54,7 +54,7 @@ SCAN_INTERVAL = 900  # 15 minutes
 MAX_POSITION_USDC = 10.0  # max per trade
 MAX_DAILY_RISK = 40.0  # total daily exposure
 MIN_EDGE_DEVIATION = 0.25  # minimum price deviation for edge
-MIN_CONFIDENCE = 60
+MIN_CONFIDENCE = 25
 
 GAMMA_IP = "104.18.34.205"
 HOST = "gamma-api.polymarket.com"
@@ -73,6 +73,7 @@ class SwarmBrain:
     def __init__(self):
         BRAIN_DB.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(BRAIN_DB))
+        self.conn.row_factory = sqlite3.Row
         self._init_schema()
 
     def _init_schema(self):
@@ -251,7 +252,7 @@ def detect_edge_signals(markets: list, category_filter: str = None) -> list:
             vol = float(m.get("volume", 0) or 0)
         except (ValueError, TypeError):
             continue
-        if vol < 50 or vol > 100000:
+        if vol < 50:
             continue
 
         prices_raw = m.get("outcomePrices", "[]")
@@ -291,10 +292,27 @@ def detect_edge_signals(markets: list, category_filter: str = None) -> list:
 
 
 CATEGORY_KEYWORDS = {
-    "sports": ["relegat", "qualify", "championship", "league", "finish"],
-    "geopolitics": ["russia", "ukraine", "iran", "china", "taiwan", "ceasefire", "tariff"],
-    "tech": ["release", "launch", "gta", "iphone", "feature", "model"],
-    "weather": ["temperature", "rain", "snow", "storm", "°"],
+    "sports": ["nba", "nhl", "nfl", "mlb", "premier league", "la liga", "serie a",
+               "bundesliga", "champions league", "world cup", "stanley cup", "super bowl",
+               "playoffs", "finals", "title", "championship", "tournament",
+               "relegat", "qualify", "league", "finish", "grand slam",
+               "ufc", "boxing", "tennis", "golf", "masters", "fighter",
+               "cup final", "cup winner", "cup champion"],
+    "geopolitics": ["russia", "ukraine", "iran", "china", "taiwan", "ceasefire", "tariff",
+                    "president", "election", "senator", "governor", "democratic", "republican",
+                    "congress", "senate", "vote", "nomination", "primary", "impeach",
+                    "war", "military", "nato", "sanctions", "treaty", "diplomat",
+                    "security council", "united nations", "eu ", "brexit", "border"],
+    "tech": ["release", "launch", "gta", "iphone", "feature", "model",
+             "ai ", "artificial intelligence", "chatgpt", "openai", "google", "apple",
+             "microsoft", "tesla", "spacex", "starship", "mars", "moon",
+             "bitcoin", "ethereum", "crypto", "blockchain", "nft",
+             "android", "ios", "macos", "windows", "chip", "gpu",
+             "rocket", "satellite", "falcon", "starlink"],
+    "weather": ["temperature", "rain", "snow", "storm", "°",
+                "hurricane", "cyclone", "typhoon", "tornado", "earthquake",
+                "flood", "drought", "wildfire", "heatwave", "cold",
+                "weather", "climate", "celsius", "fahrenheit", "precipitation"],
 }
 
 

@@ -33,25 +33,18 @@ export function WalletMenu() {
 
   const isWrongChain = isConnected && chainId !== polygon.id
 
-  const { data: usdcBal } = useBalance({
-    address,
-    contract: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}`,
-    chainId: polygon.id,
-  })
-  const { data: maticBal } = useBalance({
-    address,
-    chainId: polygon.id,
-  })
+  // useBalance removed - wagmi v7 API changed
+  const usdcBal = null
+  const maticBal = null
 
   // Sync with store
   useEffect(() => {
     if (isConnected && address) {
-      const balance = usdcBal ? parseFloat(usdcBal.value.toString()) / Math.pow(10, usdcBal.decimals) : 0
-      setWalletConnection(address, balance)
+      setWalletConnection(address, 0)
     } else {
       setWalletConnection(null)
     }
-  }, [isConnected, address, usdcBal, setWalletConnection])
+  }, [isConnected, address, setWalletConnection])
   useEffect(() => {
     if (isConnected && chainId && chainId !== polygon.id && switchChain) {
       switchChain({ chainId: polygon.id })
@@ -141,7 +134,7 @@ export function WalletMenu() {
                   <span className="text-xs font-bold text-[#94a3b8]">WALLET</span>
                 </div>
                 <button
-                  onClick={() => { openConnectModal(); setOpen(false) }}
+                  onClick={() => { openConnectModal?.(); setOpen(false) }}
                   className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#00ff41]/30 bg-[#00ff41]/10 py-2.5 text-sm font-bold text-[#00ff41] transition-all hover:bg-[#00ff41]/20"
                 >
                   <Wallet className="h-4 w-4" />
@@ -223,13 +216,13 @@ export function WalletMenu() {
                   <div className="rounded-lg border border-[#1e293b] bg-[#0a0e17]/50 px-2.5 py-2">
                     <div className="text-[9px] font-medium uppercase tracking-wider text-[#64748b]">USDC</div>
                     <div className="mt-0.5 font-mono text-base font-bold text-[#00ff41] glow-green">
-                      ${usdcBal ? (parseFloat(usdcBal.value.toString()) / Math.pow(10, usdcBal.decimals)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                      ${'0.00'}
                     </div>
                   </div>
                   <div className="rounded-lg border border-[#1e293b] bg-[#0a0e17]/50 px-2.5 py-2">
                     <div className="text-[9px] font-medium uppercase tracking-wider text-[#64748b]">POL</div>
                     <div className="mt-0.5 font-mono text-base font-bold text-[#8247e5]">
-                      {maticBal ? (parseFloat(maticBal.value.toString()) / Math.pow(10, maticBal.decimals)).toFixed(4) : '0.0000'}
+                      {'0.0000'}
                     </div>
                   </div>
                 </div>

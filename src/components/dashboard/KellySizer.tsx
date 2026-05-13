@@ -397,7 +397,7 @@ export function KellySizer() {
               <div className="relative">
                 <div className="flex items-center justify-center gap-1">
                   <div className="text-[10px] text-[#64748b]" title="Optimal bet size based on edge and odds - half fraction (recommended)">Half Kelly</div>
-                  <BadgeCheck className="h-3 w-3 text-[#f59e0b]" title="Recommended" />
+                  <BadgeCheck className="h-3 w-3 text-[#f59e0b]" />
                 </div>
                 <div className="font-mono text-sm font-bold text-[#f59e0b] glow-amber">
                   {halfKellyPct}%
