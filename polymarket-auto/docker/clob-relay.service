@@ -1,0 +1,14 @@
+[Unit]
+Description=Polymarket CLOB Relay Proxy (cloakbrowser)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/clob_relay.py --port 8877
+Restart=always
+RestartSec=10
+Environment=DISPLAY=:0
+WorkingDirectory=/opt/polymarket-auto/polymarket-auto/docker
+
+[Install]
+WantedBy=multi-user.target
