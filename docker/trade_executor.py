@@ -18,6 +18,7 @@ Env vars:
     POLYMARKET_PRIVATE_KEY — wallet private key
     CLOB_PROXY_URL         — SOCKS5 proxy (e.g. socks5://localhost:9051 for Tor)
 """
+
 import json
 import os
 import sys
@@ -35,10 +36,12 @@ DNS_OVERRIDES = {
 
 _original_getaddrinfo = socket.getaddrinfo
 
+
 def _patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
     if host in DNS_OVERRIDES:
         host = DNS_OVERRIDES[host]
     return _original_getaddrinfo(host, port, family, type, proto, flags)
+
 
 socket.getaddrinfo = _patched_getaddrinfo
 
@@ -62,17 +65,25 @@ except ImportError:
 # ============================================================================
 USDC_ADDRESS = Web3.to_checksum_address("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359")
 
-USDC_ABI = json.loads('[{"constant":true,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]')
+USDC_ABI = json.loads(
+    '[{"constant":true,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]'
+)
 
 RPC_URL = os.environ.get("POLYGON_RPC_URL", "https://polygon-bor-rpc.publicnode.com")
 CLOB_API_URL = os.environ.get("CLOB_API_URL", "https://clob.polymarket.com")
 CLOB_PROXY_URL = os.environ.get("CLOB_PROXY_URL", "")
 
-# Patch py_clob_client's httpx client to use SOCKS5 proxy (only for CLOB API)
-if CLOB_PROXY_URL:
+# Replace py_clob_client's httpx with curl_cffi to bypass Cloudflare TLS fingerprinting
+try:
     from py_clob_client.http_helpers import helpers as _helpers
-    import httpx
-    _helpers._http_client = httpx.Client(proxy=CLOB_PROXY_URL, timeout=60)
+    from curl_cffi import requests as cffi_requests
+
+    _cffi_session = cffi_requests.Session(impersonate="chrome")
+    if CLOB_PROXY_URL:
+        _cffi_session.proxies = {"https": CLOB_PROXY_URL, "http": CLOB_PROXY_URL}
+    _helpers._http_client = _cffi_session
+except ImportError:
+    pass
 
 
 class TradeExecutor:
@@ -140,7 +151,9 @@ class TradeExecutor:
             None,
         )
         if not token:
-            raise ValueError(f"Token not found for {outcome_label} in {condition_id[:16]}...")
+            raise ValueError(
+                f"Token not found for {outcome_label} in {condition_id[:16]}..."
+            )
         return token["token_id"]
 
     # ------------------------------------------------------------------
@@ -159,7 +172,9 @@ class TradeExecutor:
 
         try:
             token_id = self._get_token_id(condition_id, outcome)
-            size_shares = max(1, int(size_usdc / price) if price > 0 else int(size_usdc))
+            size_shares = max(
+                1, int(size_usdc / price) if price > 0 else int(size_usdc)
+            )
             price = max(0.01, price)
 
             order_args = OrderArgs(
@@ -179,7 +194,9 @@ class TradeExecutor:
                     "details": f"BUY {size_shares} @ {price} | {outcome}",
                 }
             else:
-                error_msg = resp.get("error", "order rejected") if resp else "no response"
+                error_msg = (
+                    resp.get("error", "order rejected") if resp else "no response"
+                )
                 return {"success": False, "error": error_msg}
 
         except Exception as e:
@@ -217,5 +234,7 @@ if __name__ == "__main__":
     print(f"Proxy: {CLOB_PROXY_URL or 'none'}")
 
     print(f"\nPlacing {args.outcome} order on {args.condition_id[:16]}...")
-    result = executor.place_order(args.condition_id, args.outcome, args.price, args.size)
+    result = executor.place_order(
+        args.condition_id, args.outcome, args.price, args.size
+    )
     print(json.dumps(result, indent=2))
