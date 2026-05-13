@@ -1,5 +1,5 @@
 web3==7.6.1
-py-clob-client==0.34.6
+py-clob-client-v2>=1.0.0
 python-dotenv==1.0.0
 requests==2.31.0
 socksio==1.0.0
