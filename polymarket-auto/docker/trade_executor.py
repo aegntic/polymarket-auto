@@ -78,10 +78,33 @@ try:
     from py_clob_client.http_helpers import helpers as _helpers
     from curl_cffi import requests as cffi_requests
 
-    _cffi_session = cffi_requests.Session(impersonate="chrome")
+    class _CffiAdapter:
+        """Wraps curl_cffi Session to match httpx Client API (content -> data)."""
+
+        def __init__(self):
+            self._s = cffi_requests.Session(impersonate="chrome")
+
+        def request(self, method, url, **kwargs):
+            if "content" in kwargs:
+                kwargs["data"] = kwargs.pop("content")
+            return self._s.request(method, url, **kwargs)
+
+        def get(self, url, **kwargs):
+            return self.request("GET", url, **kwargs)
+
+        def post(self, url, **kwargs):
+            return self.request("POST", url, **kwargs)
+
+        def put(self, url, **kwargs):
+            return self.request("PUT", url, **kwargs)
+
+        def delete(self, url, **kwargs):
+            return self.request("DELETE", url, **kwargs)
+
+    _adapter = _CffiAdapter()
     if CLOB_PROXY_URL:
-        _cffi_session.proxies = {"https": CLOB_PROXY_URL, "http": CLOB_PROXY_URL}
-    _helpers._http_client = _cffi_session
+        _adapter._s.proxies = {"https": CLOB_PROXY_URL, "http": CLOB_PROXY_URL}
+    _helpers._http_client = _adapter
 except ImportError:
     pass
 
