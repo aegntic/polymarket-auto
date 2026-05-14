@@ -257,7 +257,7 @@ class SwarmBrain:
 # Stealth Copy Signals (reads from StealthTrace v3 shared DB)
 # ============================================================================
 
-STEALTH_DB = Path("/app/data/watched_wallets.db")
+STEALTH_DB = Path(os.environ.get("STEALTH_DB_PATH", "/app/data/watched_wallets.db"))
 
 
 def fetch_stealth_copy_signals(category_filter: str = None) -> list:
