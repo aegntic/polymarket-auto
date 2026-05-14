@@ -252,6 +252,36 @@ class WatchedWalletDB:
         )
         self.conn.commit()
 
+    def upsert_position(self, wallet_address: str, pos: dict):
+        self.conn.execute(
+            """
+            INSERT INTO wallet_positions (wallet_address, condition_id, question, outcome,
+                size_usdc, price, first_seen_at, market_volume)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING
+        """,
+            (
+                wallet_address,
+                pos.get("condition_id", ""),
+                pos.get("question", ""),
+                pos.get("outcome", ""),
+                pos.get("size_usdc", 0),
+                pos.get("price", 0.5),
+                datetime.now(timezone.utc).isoformat(),
+                pos.get("market_volume", 0),
+            ),
+        )
+        self.conn.commit()
+
+    def clear_stale_positions(self, max_age_hours: int = 48):
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+        ).isoformat()
+        self.conn.execute(
+            "DELETE FROM wallet_positions WHERE first_seen_at < ?", (cutoff,)
+        )
+        self.conn.commit()
+
 
 # ============================================================================
 # API Clients
@@ -665,6 +695,71 @@ def analyze_with_grok(profile: dict) -> dict:
 # ============================================================================
 
 
+def monitor_positions(db: WatchedWalletDB, markets: List[dict]):
+    """Query recent trades for watched wallets and populate wallet_positions."""
+    wallets = db.get_watchable(min_score=0)
+    if not wallets:
+        return
+
+    vol_map = {}
+    for m in markets:
+        mid = m.get("conditionId") or m.get("id") or m.get("slug", "")
+        v = _market_volume(m)
+        q = m.get("question", "")
+        if mid and v:
+            vol_map[str(mid)] = (v, q)
+
+    db.clear_stale_positions(max_age_hours=48)
+    total_positions = 0
+
+    for w in wallets[:15]:
+        address = w["address"]
+        trades = data_api_get(f"/v1/trades?user={address}&limit=25")
+        if not isinstance(trades, list):
+            continue
+
+        seen_conditions = set()
+        for t in trades:
+            cid = t.get("conditionId") or t.get("condition_id") or t.get("market") or ""
+            if not cid or cid in seen_conditions:
+                continue
+            seen_conditions.add(cid)
+
+            vol_info = vol_map.get(str(cid), (0, ""))
+            market_vol = vol_info[0]
+            question = vol_info[1] or t.get("title") or t.get("market_slug") or ""
+
+            side = t.get("side") or ""
+            outcome = "YES" if side.upper() == "BUY" else "NO"
+            try:
+                price = float(t.get("price") or t.get("avgPrice") or 0.5)
+            except (ValueError, TypeError):
+                price = 0.5
+            try:
+                size = float(t.get("size") or t.get("volume") or 0)
+            except (ValueError, TypeError):
+                size = 0
+
+            if size <= 0:
+                continue
+
+            db.upsert_position(
+                address,
+                {
+                    "condition_id": cid,
+                    "question": question,
+                    "outcome": outcome,
+                    "size_usdc": size * price,
+                    "price": price,
+                    "market_volume": market_vol,
+                },
+            )
+            total_positions += 1
+
+    if total_positions:
+        print(f"  → {total_positions} positions tracked", file=sys.stderr)
+
+
 def run_scan(db: WatchedWalletDB, polygonscan: PolygonscanClient) -> dict:
     """Full LAYER 1-5 scan. Returns stats dict."""
     stats = {"seeds_scanned": 0, "candidates_found": 0, "promoted": 0, "blacklisted": 0}
@@ -863,7 +958,11 @@ def run_scan(db: WatchedWalletDB, polygonscan: PolygonscanClient) -> dict:
                     file=sys.stderr,
                 )
 
-    # Step 8: Telegram digest
+    # Step 8: Monitor positions for copy-trading
+    print("→ Monitoring positions...", file=sys.stderr)
+    monitor_positions(db, markets)
+
+    # Step 9: Telegram digest
     top_wallets = db.get_watchable(min_score=MIN_SCORE_TO_WATCH)[:5]
     if top_wallets:
         send_digest(top_wallets)
