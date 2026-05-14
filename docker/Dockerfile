@@ -4,7 +4,7 @@ LABEL org.opencontainers.image.description="PolyAgent Swarm Trading Node"
 
 # System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates \
+    curl ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
 # App
@@ -16,7 +16,8 @@ COPY swarm_agent.py /app/
 COPY trade_executor.py /app/
 COPY requirements.txt /app/
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir --upgrade git+https://github.com/Polymarket/py-builder-relayer-client.git
 
 # Health check
 HEALTHCHECK --interval=300s --timeout=15s --retries=2 \
