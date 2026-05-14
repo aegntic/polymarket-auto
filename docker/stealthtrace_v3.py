@@ -819,6 +819,7 @@ def run_scan(db: WatchedWalletDB, polygonscan: PolygonscanClient) -> dict:
 
         db_entry = {
             **wallet,
+            "score": wallet["total_score"],
             "primary_edge": primary_edge,
             "stealth_level": "HIGH" if wallet["total_score"] >= 70 else "MEDIUM",
             "copy_action": action,
