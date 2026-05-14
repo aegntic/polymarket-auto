@@ -374,23 +374,30 @@ class PolygonscanClient:
 
 
 def discover_seeds_from_leaderboard(db: WatchedWalletDB) -> int:
-    """Pull Polymarket leaderboard + top obscure winners as new seeds."""
     added = 0
 
-    # Top PnL traders
     data = data_api_get("/v1/leaderboard?limit=50&timePeriod=ALL&sortBy=pnl")
     if isinstance(data, list):
         for entry in data:
-            addr = entry.get("user") or entry.get("address") or ""
+            addr = (
+                entry.get("proxyWallet")
+                or entry.get("user")
+                or entry.get("address")
+                or ""
+            )
             if addr and addr.startswith("0x") and len(addr) == 42:
                 db.add_seed(addr.lower(), "leaderboard_pnl")
                 added += 1
 
-    # Top daily winners (fresh seeds)
     data = data_api_get("/v1/leaderboard?limit=30&timePeriod=DAY&sortBy=pnl")
     if isinstance(data, list):
         for entry in data:
-            addr = entry.get("user") or entry.get("address") or ""
+            addr = (
+                entry.get("proxyWallet")
+                or entry.get("user")
+                or entry.get("address")
+                or ""
+            )
             if addr and addr.startswith("0x") and len(addr) == 42:
                 db.add_seed(addr.lower(), "leaderboard_daily")
                 added += 1
@@ -413,7 +420,12 @@ def discover_seeds_from_obscure_winners(
         if not isinstance(data, list):
             continue
         for trade in data:
-            addr = trade.get("user") or trade.get("address") or ""
+            addr = (
+                trade.get("proxyWallet")
+                or trade.get("user")
+                or trade.get("address")
+                or ""
+            )
             pnl = float(trade.get("pnl") or trade.get("realizedPnl") or 0)
             if addr and addr.startswith("0x") and len(addr) == 42 and pnl > 50:
                 db.add_seed(addr.lower(), f"obscure_winner_{slug[:20]}")
@@ -834,7 +846,10 @@ def run_scan(db: WatchedWalletDB, polygonscan: PolygonscanClient) -> dict:
     # Step 7: Prune wallets that hit public leaderboards
     lb_data = data_api_get("/v1/leaderboard?limit=300&timePeriod=WEEK&sortBy=volume")
     if isinstance(lb_data, list):
-        lb_addrs = {(e.get("user") or e.get("address") or "").lower() for e in lb_data}
+        lb_addrs = {
+            (e.get("proxyWallet") or e.get("user") or e.get("address") or "").lower()
+            for e in lb_data
+        }
         for w in db.get_watchable(min_score=0):
             if w["address"].lower() in lb_addrs:
                 db.blacklist(w["address"], "appeared_on_public_leaderboard")
@@ -849,7 +864,13 @@ def run_scan(db: WatchedWalletDB, polygonscan: PolygonscanClient) -> dict:
     if top_wallets:
         send_digest(top_wallets)
 
-    db.log_scan(**stats)
+    db.log_scan(
+        seeds_scanned=stats["seeds_scanned"],
+        candidates=stats["candidates_found"],
+        promoted=stats["promoted"],
+        blacklisted=stats["blacklisted"],
+        notes="",
+    )
     print(
         f"→ Scan complete: {promoted} promoted, {stats['blacklisted']} blacklisted",
         file=sys.stderr,
