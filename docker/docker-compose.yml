@@ -94,5 +94,23 @@ services:
       - swarm_brain:/app/data
       - ./state:/app/state
 
+  stealth-hunter:
+    build:
+      context: .
+      dockerfile: Dockerfile.stealth-hunter
+    container_name: polyagent-stealth-hunter
+    restart: unless-stopped
+    environment:
+      XAI_API_KEY: "${XAI_API_KEY}"
+      POLYGONSCAN_API_KEY: "${POLYGONSCAN_API_KEY}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      POLYMARKET_GAMMA_IP: "104.18.34.205"
+      STEALTH_DB_PATH: "/app/data/watched_wallets.db"
+      SCAN_INTERVAL: "14400"
+    volumes:
+      - swarm_brain:/app/data
+      - ./state:/app/state
+
 volumes:
   swarm_brain:
