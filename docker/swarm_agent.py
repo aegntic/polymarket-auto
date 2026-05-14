@@ -59,13 +59,16 @@ MIN_CONFIDENCE = 25
 GAMMA_IP = "104.18.34.205"
 HOST = "gamma-api.polymarket.com"
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8797513938:AAHFLeW-8nQu8qtekAKibriifcIKmL1B2yE")
+TELEGRAM_TOKEN = os.environ.get(
+    "TELEGRAM_BOT_TOKEN", "8797513938:AAHFLeW-8nQu8qtekAKibriifcIKmL1B2yE"
+)
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "654439651")
 
 
 # ============================================================================
 # Swarm Brain (shared learning DB)
 # ============================================================================
+
 
 class SwarmBrain:
     """Shared SQLite brain for all swarm agents. Tracks trades, PnL, strategies."""
@@ -133,18 +136,29 @@ class SwarmBrain:
         self.conn.commit()
 
     def log_trade(self, trade: dict):
-        self.conn.execute("""
+        self.conn.execute(
+            """
             INSERT OR REPLACE INTO trades (id, agent_id, category, market_id, question,
                 outcome, price, size, tx_hash, status, edge_deviation, confidence, executed_at, notes)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            trade["id"], trade["agent_id"], trade["category"], trade["market_id"],
-            trade["question"], trade["outcome"], trade["price"], trade["size"],
-            trade.get("tx_hash"), trade.get("status", "pending"),
-            trade.get("edge_deviation"), trade.get("confidence"),
-            trade.get("executed_at", datetime.now(timezone.utc).isoformat()),
-            trade.get("notes"),
-        ))
+        """,
+            (
+                trade["id"],
+                trade["agent_id"],
+                trade["category"],
+                trade["market_id"],
+                trade["question"],
+                trade["outcome"],
+                trade["price"],
+                trade["size"],
+                trade.get("tx_hash"),
+                trade.get("status", "pending"),
+                trade.get("edge_deviation"),
+                trade.get("confidence"),
+                trade.get("executed_at", datetime.now(timezone.utc).isoformat()),
+                trade.get("notes"),
+            ),
+        )
         self.conn.commit()
 
     def update_pnl(self, trade_id: str, pnl: float, status: str = "resolved"):
@@ -177,10 +191,18 @@ class SwarmBrain:
         ).fetchall()
         return [dict(row) for row in rows]
 
-    def add_learning(self, agent_id: str, category: str, insight: str, pnl_impact: float = 0):
+    def add_learning(
+        self, agent_id: str, category: str, insight: str, pnl_impact: float = 0
+    ):
         self.conn.execute(
             "INSERT INTO learnings (agent_id, category, insight, pnl_impact, created_at) VALUES (?, ?, ?, ?, ?)",
-            (agent_id, category, insight, pnl_impact, datetime.now(timezone.utc).isoformat()),
+            (
+                agent_id,
+                category,
+                insight,
+                pnl_impact,
+                datetime.now(timezone.utc).isoformat(),
+            ),
         )
         self.conn.commit()
 
@@ -203,9 +225,17 @@ class SwarmBrain:
             )
         else:
             defaults = {
-                "agent_id": agent_id, "category": "", "capital": 0, "peak_capital": 0,
-                "daily_pnl": 0, "daily_trades": 0, "total_trades": 0, "win_rate": 0,
-                "last_scan": None, "last_trade": None, "status": "active",
+                "agent_id": agent_id,
+                "category": "",
+                "capital": 0,
+                "peak_capital": 0,
+                "daily_pnl": 0,
+                "daily_trades": 0,
+                "total_trades": 0,
+                "win_rate": 0,
+                "last_scan": None,
+                "last_trade": None,
+                "status": "active",
             }
             defaults.update(updates)
             cols = ", ".join(defaults.keys())
@@ -224,17 +254,92 @@ class SwarmBrain:
 
 
 # ============================================================================
+# Stealth Copy Signals (reads from StealthTrace v3 shared DB)
+# ============================================================================
+
+STEALTH_DB = Path("/app/data/watched_wallets.db")
+
+
+def fetch_stealth_copy_signals(category_filter: str = None) -> list:
+    """Read watched wallets' recent obscure trades from shared DB.
+    Returns signals matching the same format as detect_edge_signals()."""
+    if not STEALTH_DB.exists():
+        return []
+
+    signals = []
+    try:
+        conn = sqlite3.connect(str(STEALTH_DB), timeout=5)
+        conn.row_factory = sqlite3.Row
+
+        wallets = conn.execute(
+            "SELECT * FROM watched_wallets WHERE active = 1 AND blacklisted = 0 "
+            "AND copy_action IN ('AUTO_WATCH', 'MONITOR_FUNDING') AND score >= 50 "
+            "ORDER BY score DESC LIMIT 10"
+        ).fetchall()
+
+        for w in wallets:
+            positions = conn.execute(
+                "SELECT * FROM wallet_positions WHERE wallet_address = ? "
+                "ORDER BY first_seen_at DESC LIMIT 5",
+                (w["address"],),
+            ).fetchall()
+
+            for p in positions:
+                q = p["question"] or ""
+                cat = categorize(q)
+                if category_filter and cat != category_filter:
+                    continue
+
+                size_pct = w["suggested_size_pct"] or 1.5
+                our_size = min(MAX_POSITION_USDC, 100 * size_pct / 100)
+
+                signals.append(
+                    {
+                        "market_id": p["condition_id"] or "",
+                        "question": q,
+                        "volume": p["market_volume"] or 0,
+                        "yes_price": p["price"] or 0.5,
+                        "deviation": abs((p["price"] or 0.5) - 0.50),
+                        "category": cat,
+                        "slug": "",
+                        "source": f"stealth_copy:{w['address'][:10]}:{w['score']}pts",
+                        "copy_size": our_size,
+                    }
+                )
+
+        conn.close()
+    except Exception:
+        pass
+
+    return signals
+
+
+# ============================================================================
 # Signal Detection
 # ============================================================================
+
 
 def fetch_markets(limit: int = 100) -> list:
     """Fetch Polymarket markets via DNS bypass."""
     url = f"https://{HOST}/markets?limit={limit}"
     try:
         result = subprocess.run(
-            ["curl", "-s", "--resolve", f"{HOST}:443:{GAMMA_IP}", url,
-             "-H", f"Host: {HOST}", "-H", "User-Agent: PolyAgent/1.0", "--max-time", "15"],
-            capture_output=True, text=True, timeout=20,
+            [
+                "curl",
+                "-s",
+                "--resolve",
+                f"{HOST}:443:{GAMMA_IP}",
+                url,
+                "-H",
+                f"Host: {HOST}",
+                "-H",
+                "User-Agent: PolyAgent/1.0",
+                "--max-time",
+                "15",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
         )
         if result.returncode == 0:
             data = json.loads(result.stdout)
@@ -257,8 +362,10 @@ def detect_edge_signals(markets: list, category_filter: str = None) -> list:
 
         prices_raw = m.get("outcomePrices", "[]")
         if isinstance(prices_raw, str):
-            try: prices_raw = json.loads(prices_raw)
-            except: continue
+            try:
+                prices_raw = json.loads(prices_raw)
+            except:
+                continue
         if not isinstance(prices_raw, list) or len(prices_raw) < 2:
             continue
         try:
@@ -277,42 +384,145 @@ def detect_edge_signals(markets: list, category_filter: str = None) -> list:
         if category_filter and cat != category_filter:
             continue
 
-        signals.append({
-            "market_id": m.get("conditionId", ""),
-            "question": question,
-            "volume": vol,
-            "yes_price": yes,
-            "deviation": dev,
-            "category": cat,
-            "slug": m.get("slug", ""),
-        })
+        signals.append(
+            {
+                "market_id": m.get("conditionId", ""),
+                "question": question,
+                "volume": vol,
+                "yes_price": yes,
+                "deviation": dev,
+                "category": cat,
+                "slug": m.get("slug", ""),
+            }
+        )
 
     signals.sort(key=lambda s: s["deviation"], reverse=True)
     return signals
 
 
 CATEGORY_KEYWORDS = {
-    "sports": ["nba", "nhl", "nfl", "mlb", "premier league", "la liga", "serie a",
-               "bundesliga", "champions league", "world cup", "stanley cup", "super bowl",
-               "playoffs", "finals", "title", "championship", "tournament",
-               "relegat", "qualify", "league", "finish", "grand slam",
-               "ufc", "boxing", "tennis", "golf", "masters", "fighter",
-               "cup final", "cup winner", "cup champion"],
-    "geopolitics": ["russia", "ukraine", "iran", "china", "taiwan", "ceasefire", "tariff",
-                    "president", "election", "senator", "governor", "democratic", "republican",
-                    "congress", "senate", "vote", "nomination", "primary", "impeach",
-                    "war", "military", "nato", "sanctions", "treaty", "diplomat",
-                    "security council", "united nations", "eu ", "brexit", "border"],
-    "tech": ["release", "launch", "gta", "iphone", "feature", "model",
-             "ai ", "artificial intelligence", "chatgpt", "openai", "google", "apple",
-             "microsoft", "tesla", "spacex", "starship", "mars", "moon",
-             "bitcoin", "ethereum", "crypto", "blockchain", "nft",
-             "android", "ios", "macos", "windows", "chip", "gpu",
-             "rocket", "satellite", "falcon", "starlink"],
-    "weather": ["temperature", "rain", "snow", "storm", "°",
-                "hurricane", "cyclone", "typhoon", "tornado", "earthquake",
-                "flood", "drought", "wildfire", "heatwave", "cold",
-                "weather", "climate", "celsius", "fahrenheit", "precipitation"],
+    "sports": [
+        "nba",
+        "nhl",
+        "nfl",
+        "mlb",
+        "premier league",
+        "la liga",
+        "serie a",
+        "bundesliga",
+        "champions league",
+        "world cup",
+        "stanley cup",
+        "super bowl",
+        "playoffs",
+        "finals",
+        "title",
+        "championship",
+        "tournament",
+        "relegat",
+        "qualify",
+        "league",
+        "finish",
+        "grand slam",
+        "ufc",
+        "boxing",
+        "tennis",
+        "golf",
+        "masters",
+        "fighter",
+        "cup final",
+        "cup winner",
+        "cup champion",
+    ],
+    "geopolitics": [
+        "russia",
+        "ukraine",
+        "iran",
+        "china",
+        "taiwan",
+        "ceasefire",
+        "tariff",
+        "president",
+        "election",
+        "senator",
+        "governor",
+        "democratic",
+        "republican",
+        "congress",
+        "senate",
+        "vote",
+        "nomination",
+        "primary",
+        "impeach",
+        "war",
+        "military",
+        "nato",
+        "sanctions",
+        "treaty",
+        "diplomat",
+        "security council",
+        "united nations",
+        "eu ",
+        "brexit",
+        "border",
+    ],
+    "tech": [
+        "release",
+        "launch",
+        "gta",
+        "iphone",
+        "feature",
+        "model",
+        "ai ",
+        "artificial intelligence",
+        "chatgpt",
+        "openai",
+        "google",
+        "apple",
+        "microsoft",
+        "tesla",
+        "spacex",
+        "starship",
+        "mars",
+        "moon",
+        "bitcoin",
+        "ethereum",
+        "crypto",
+        "blockchain",
+        "nft",
+        "android",
+        "ios",
+        "macos",
+        "windows",
+        "chip",
+        "gpu",
+        "rocket",
+        "satellite",
+        "falcon",
+        "starlink",
+    ],
+    "weather": [
+        "temperature",
+        "rain",
+        "snow",
+        "storm",
+        "°",
+        "hurricane",
+        "cyclone",
+        "typhoon",
+        "tornado",
+        "earthquake",
+        "flood",
+        "drought",
+        "wildfire",
+        "heatwave",
+        "cold",
+        "weather",
+        "climate",
+        "celsius",
+        "fahrenheit",
+        "precipitation",
+    ],
 }
 
 
@@ -329,7 +539,10 @@ def categorize(question: str) -> str:
 # Risk Check
 # ============================================================================
 
-def risk_check(signal: dict, brain: SwarmBrain, agent_id: str) -> tuple[bool, str, float]:
+
+def risk_check(
+    signal: dict, brain: SwarmBrain, agent_id: str
+) -> tuple[bool, str, float]:
     """Run pre-trade risk checks. Returns (allowed, reason, adjusted_size)."""
     reasons = []
     size = min(MAX_POSITION_USDC, signal["volume"] * 0.01)  # 1% of market volume
@@ -337,7 +550,9 @@ def risk_check(signal: dict, brain: SwarmBrain, agent_id: str) -> tuple[bool, st
     # Daily exposure
     daily_exposure = brain.get_daily_exposure(agent_id)
     if daily_exposure + size > MAX_DAILY_RISK:
-        reasons.append(f"Daily exposure ${daily_exposure:.0f} + ${size:.0f} > ${MAX_DAILY_RISK}")
+        reasons.append(
+            f"Daily exposure ${daily_exposure:.0f} + ${size:.0f} > ${MAX_DAILY_RISK}"
+        )
 
     # Daily loss
     daily_pnl = brain.get_daily_pnl(agent_id)
@@ -365,6 +580,7 @@ def risk_check(signal: dict, brain: SwarmBrain, agent_id: str) -> tuple[bool, st
 # Telegram
 # ============================================================================
 
+
 def send_telegram(text: str) -> bool:
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         return False
@@ -383,6 +599,7 @@ def send_telegram(text: str) -> bool:
 # Swarm Agent
 # ============================================================================
 
+
 class SwarmAgent:
     """Self-learning trading agent. Reads signals → trades → learns."""
 
@@ -394,12 +611,28 @@ class SwarmAgent:
 
     def run_cycle(self):
         """Single decision cycle: scan → decide → execute → learn."""
-        print(f"\n◆ {self.agent_id} — cycle start {datetime.now().strftime('%H:%M:%S')}", file=sys.stderr)
+        print(
+            f"\n◆ {self.agent_id} — cycle start {datetime.now().strftime('%H:%M:%S')}",
+            file=sys.stderr,
+        )
 
         # 1. Scan for signals
         markets = fetch_markets(100)
         signals = detect_edge_signals(markets, self.category)
-        print(f"  {len(signals)} edge signals in {self.category}", file=sys.stderr)
+
+        # 2. Merge stealth copy signals
+        stealth_signals = fetch_stealth_copy_signals(self.category)
+        if stealth_signals:
+            print(f"  {len(stealth_signals)} stealth copy signals", file=sys.stderr)
+            seen_ids = {s["market_id"] for s in signals}
+            for ss in stealth_signals:
+                if ss["market_id"] not in seen_ids:
+                    signals.append(ss)
+                    seen_ids.add(ss["market_id"])
+
+        print(
+            f"  {len(signals)} total edge signals in {self.category}", file=sys.stderr
+        )
 
         if not signals:
             self._log_learning("No edge signals found — market is efficient")
@@ -407,7 +640,9 @@ class SwarmAgent:
 
         # 2. Load past learnings for context
         learnings = self.brain.get_learnings(self.category, limit=5)
-        learning_context = "; ".join([l["insight"] for l in learnings]) if learnings else "none"
+        learning_context = (
+            "; ".join([l["insight"] for l in learnings]) if learnings else "none"
+        )
 
         # 3. For top signal: risk check → execute
         top = signals[0]
@@ -418,14 +653,24 @@ class SwarmAgent:
             return
 
         # 4. Execute trade
-        outcome = "NO" if top["yes_price"] > 0.50 else "YES"  # fade the consensus on obscure
-        trade_id = hashlib.md5(f"{self.agent_id}{top['market_id']}{time.time()}".encode()).hexdigest()[:16]
+        outcome = "NO" if top["yes_price"] > 0.50 else "YES"
+        trade_size = top.get("copy_size", size)
+        trade_id = hashlib.md5(
+            f"{self.agent_id}{top['market_id']}{time.time()}".encode()
+        ).hexdigest()[:16]
 
-        print(f"  ▶ {outcome} on {top['question'][:60]} at {top['yes_price']:.3f} for ${size:.2f}", file=sys.stderr)
+        print(
+            f"  ▶ {outcome} on {top['question'][:60]} at {top['yes_price']:.3f} for ${trade_size:.2f}",
+            file=sys.stderr,
+        )
+        if top.get("source"):
+            print(f"    source: {top['source']}", file=sys.stderr)
 
         result = {"success": False, "error": "dry run — no private key"}
         if self.executor:
-            result = self.executor.place_order(top["market_id"], outcome, top["yes_price"], size)
+            result = self.executor.place_order(
+                top["market_id"], outcome, top["yes_price"], trade_size
+            )
 
         # 5. Log trade
         trade = {
@@ -446,10 +691,14 @@ class SwarmAgent:
         self.brain.log_trade(trade)
 
         # 6. Update agent state
-        self.brain.update_agent_state(self.agent_id, {
-            "last_trade": datetime.now(timezone.utc).isoformat(),
-            "daily_trades": self.brain.get_daily_exposure(self.agent_id) / max(size, 1),
-        })
+        self.brain.update_agent_state(
+            self.agent_id,
+            {
+                "last_trade": datetime.now(timezone.utc).isoformat(),
+                "daily_trades": self.brain.get_daily_exposure(self.agent_id)
+                / max(size, 1),
+            },
+        )
 
         # 7. Telegram confirmation
         if result.get("success"):
@@ -459,7 +708,9 @@ class SwarmAgent:
                 f"<b>{top['question'][:80]}</b>\n"
                 f"TX: <code>{result['tx_hash'][:16]}...</code>"
             )
-            self._log_learning(f"EXECUTED {outcome} on {top['question'][:40]} — monitoring outcome")
+            self._log_learning(
+                f"EXECUTED {outcome} on {top['question'][:40]} — monitoring outcome"
+            )
         else:
             print(f"  ✗ Failed: {result.get('error', 'unknown')}", file=sys.stderr)
 
@@ -468,9 +719,15 @@ class SwarmAgent:
 
     def run_loop(self):
         """Continuous scan → trade loop."""
-        print(f"◆ PolyAgent {self.agent_id} [{self.category}] starting...", file=sys.stderr)
+        print(
+            f"◆ PolyAgent {self.agent_id} [{self.category}] starting...",
+            file=sys.stderr,
+        )
         balance = self.executor.get_balance() if self.executor else 0
-        print(f"  Wallet: {self.executor.address if self.executor else 'N/A'} | Balance: ${balance:.2f}", file=sys.stderr)
+        print(
+            f"  Wallet: {self.executor.address if self.executor else 'N/A'} | Balance: ${balance:.2f}",
+            file=sys.stderr,
+        )
 
         while True:
             try:
@@ -487,10 +744,14 @@ class SwarmAgent:
 # CLI
 # ============================================================================
 
+
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="PolyAgent Swarm Trading Agent")
-    parser.add_argument("--category", default=None, help="Market category to specialize in")
+    parser.add_argument(
+        "--category", default=None, help="Market category to specialize in"
+    )
     parser.add_argument("--agent-id", default=None, help="Unique agent identifier")
     parser.add_argument("--once", action="store_true", help="Single cycle, then exit")
     parser.add_argument("--private-key", default=None, help="Wallet private key")
@@ -498,12 +759,21 @@ def main():
 
     # Auto-detect category from env or arg
     category = args.category or os.environ.get("STEALTH_CATEGORY", "sports")
-    agent_id = args.agent_id or f"polyagent_{category}_{hashlib.md5(category.encode()).hexdigest()[:6]}"
+    agent_id = (
+        args.agent_id
+        or f"polyagent_{category}_{hashlib.md5(category.encode()).hexdigest()[:6]}"
+    )
 
     private_key = args.private_key or os.environ.get("POLYMARKET_PRIVATE_KEY", "")
     if not private_key:
-        print("⚠ POLYMARKET_PRIVATE_KEY not set — trading in dry-run mode", file=sys.stderr)
-        print("  Set env var or pass --private-key to execute real trades", file=sys.stderr)
+        print(
+            "⚠ POLYMARKET_PRIVATE_KEY not set — trading in dry-run mode",
+            file=sys.stderr,
+        )
+        print(
+            "  Set env var or pass --private-key to execute real trades",
+            file=sys.stderr,
+        )
 
     agent = SwarmAgent(agent_id, category, private_key)
 

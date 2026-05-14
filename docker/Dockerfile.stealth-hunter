@@ -1,0 +1,18 @@
+FROM python:3.11-slim
+
+LABEL org.opencontainers.image.description="StealthTrace v3 — Autonomous Obscure Edge Hunter"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY stealthtrace_v3.py /app/
+COPY requirements.txt /app/
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+HEALTHCHECK --interval=600s --timeout=15s --retries=2 \
+    CMD python3 -c "import sqlite3; sqlite3.connect('/app/data/watched_wallets.db'); print('ok')" || exit 1
+
+CMD ["python3", "stealthtrace_v3.py"]
