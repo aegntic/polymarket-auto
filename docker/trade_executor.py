@@ -145,16 +145,26 @@ except ImportError:
 
 
 def derive_deposit_wallet(private_key: str) -> str:
-    from py_builder_relayer_client.client import RelayClient
-    from py_builder_relayer_client.config import get_contract_config
-    from py_builder_relayer_client.client import derive as _derive
+    try:
+        from py_builder_relayer_client.client import derive_deposit_wallet as _derive_dw
+        from py_builder_relayer_client.config import get_contract_config
+        from web3 import Web3 as _W3
 
-    config = get_contract_config(137)
-    from web3 import Web3 as _W3
+        config = get_contract_config(137)
+        account = _W3().eth.account.from_key(private_key)
+        return _derive_dw(
+            account.address,
+            config.deposit_wallet_factory,
+            config.deposit_wallet_implementation,
+        )
+    except (ImportError, AttributeError):
+        from py_builder_relayer_client.client import derive as _derive
+        from py_builder_relayer_client.config import get_contract_config
+        from web3 import Web3 as _W3
 
-    account = _W3().eth.account.from_key(private_key)
-    eoa = account.address
-    return _derive(eoa, config.safe_factory)
+        config = get_contract_config(137)
+        account = _W3().eth.account.from_key(private_key)
+        return _derive(account.address, config.safe_factory)
 
 
 class TradeExecutor:
@@ -203,14 +213,26 @@ class TradeExecutor:
 
     def _derive_deposit_wallet(self) -> str:
         try:
-            from py_builder_relayer_client.client import RelayClient
+            from py_builder_relayer_client.client import (
+                derive_deposit_wallet as _derive_dw,
+            )
             from py_builder_relayer_client.config import get_contract_config
-            from py_builder_relayer_client.client import derive as _derive
 
             config = get_contract_config(137)
-            return _derive(self.address, config.safe_factory)
-        except Exception:
-            return ""
+            return _derive_dw(
+                self.address,
+                config.deposit_wallet_factory,
+                config.deposit_wallet_implementation,
+            )
+        except (ImportError, AttributeError):
+            try:
+                from py_builder_relayer_client.client import derive as _derive
+                from py_builder_relayer_client.config import get_contract_config
+
+                config = get_contract_config(137)
+                return _derive(self.address, config.safe_factory)
+            except Exception:
+                return ""
 
     def get_balance(self) -> float:
         if self.deposit_wallet:
