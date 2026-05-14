@@ -531,8 +531,11 @@ def layer3_timing_anomaly(trades: List[dict]) -> Tuple[int, List[str]]:
         if not ts_str:
             continue
         try:
-            tt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-        except ValueError:
+            if isinstance(ts_str, (int, float)):
+                tt = datetime.fromtimestamp(ts_str, tz=timezone.utc)
+            else:
+                tt = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+        except (ValueError, TypeError, OSError):
             continue
         hours = (now - tt).total_seconds() / 3600
         size = float(t.get("size") or t.get("volume") or 0)
