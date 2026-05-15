@@ -182,7 +182,7 @@ class SwarmBrain:
     def get_daily_exposure(self, agent_id: str) -> float:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         row = self.conn.execute(
-            "SELECT COALESCE(SUM(size), 0) FROM trades WHERE agent_id = ? AND date(executed_at) = ? AND status != 'cancelled'",
+            "SELECT COALESCE(SUM(size), 0) FROM trades WHERE agent_id = ? AND date(executed_at) = ? AND status NOT IN ('cancelled', 'resolved', 'closed', 'paper')",
             (agent_id, today),
         ).fetchone()
         return row[0] if row else 0.0
