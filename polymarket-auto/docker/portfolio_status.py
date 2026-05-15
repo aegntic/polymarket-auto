@@ -29,6 +29,12 @@ for t in trades:
         else:
             positions[mid]["no"] += size
         positions[mid]["cost"] += size * price
+    elif side == "SELL":
+        if out == "Yes":
+            positions[mid]["yes"] -= size
+        else:
+            positions[mid]["no"] -= size
+        positions[mid]["cost"] -= size * price
 
 result = subprocess.run(
     [
