@@ -183,30 +183,50 @@ class TradeExecutor:
 
         self.deposit_wallet = self._derive_deposit_wallet()
 
-        for attempt in range(10):
-            try:
-                temp_clob = V2ClobClient(
-                    host=CLOB_API_URL,
-                    key=private_key,
-                    chain_id=137,
-                )
-                creds = temp_clob.create_or_derive_api_key()
+        env_api_key = os.environ.get("CLOB_API_KEY", "")
+        env_api_secret = os.environ.get("CLOB_API_SECRET", "")
+        env_api_passphrase = os.environ.get("CLOB_API_PASSPHRASE", "")
 
-                self.clob = V2ClobClient(
-                    host=CLOB_API_URL,
-                    key=private_key,
-                    chain_id=137,
-                    creds=creds,
-                    signature_type=SignatureTypeV2.POLY_1271,
-                    funder=self.deposit_wallet,
-                )
-                self.creds = creds
-                break
-            except Exception as e:
-                if attempt < 9:
-                    time.sleep(6)
-                else:
-                    raise
+        if env_api_key and env_api_secret and env_api_passphrase:
+            creds = ApiCreds(
+                api_key=env_api_key,
+                api_secret=env_api_secret,
+                api_passphrase=env_api_passphrase,
+            )
+            self.clob = V2ClobClient(
+                host=CLOB_API_URL,
+                key=private_key,
+                chain_id=137,
+                creds=creds,
+                signature_type=SignatureTypeV2.POLY_1271,
+                funder=self.deposit_wallet,
+            )
+            self.creds = creds
+        else:
+            for attempt in range(10):
+                try:
+                    temp_clob = V2ClobClient(
+                        host=CLOB_API_URL,
+                        key=private_key,
+                        chain_id=137,
+                    )
+                    creds = temp_clob.create_or_derive_api_key()
+
+                    self.clob = V2ClobClient(
+                        host=CLOB_API_URL,
+                        key=private_key,
+                        chain_id=137,
+                        creds=creds,
+                        signature_type=SignatureTypeV2.POLY_1271,
+                        funder=self.deposit_wallet,
+                    )
+                    self.creds = creds
+                    break
+                except Exception as e:
+                    if attempt < 9:
+                        time.sleep(6)
+                    else:
+                        raise
 
         self._tick_cache: dict[str, str] = {}
         self._synced_balance = False
