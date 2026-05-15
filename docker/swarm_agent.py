@@ -677,10 +677,27 @@ class SwarmAgent:
 
         all_signals = []
         seen_ids = set()
+        market_lookup = {
+            m.get("conditionId", ""): m for m in markets if m.get("conditionId")
+        }
         for s in stealth_signals:
-            if s["market_id"] not in seen_ids:
+            cid = s["market_id"]
+            if cid not in seen_ids and cid in market_lookup:
+                m = market_lookup[cid]
+                prices_raw = m.get("outcomePrices", "[]")
+                if isinstance(prices_raw, str):
+                    try:
+                        prices_raw = json.loads(prices_raw)
+                    except:
+                        prices_raw = []
+                if isinstance(prices_raw, list) and len(prices_raw) >= 2:
+                    try:
+                        s["yes_price"] = float(prices_raw[0])
+                        s["no_price"] = float(prices_raw[1])
+                    except (ValueError, TypeError):
+                        pass
                 all_signals.append(s)
-                seen_ids.add(s["market_id"])
+                seen_ids.add(cid)
         for s in edge_signals:
             if s["market_id"] not in seen_ids:
                 all_signals.append(s)
