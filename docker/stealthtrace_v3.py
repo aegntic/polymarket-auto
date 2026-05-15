@@ -699,24 +699,18 @@ def analyze_with_grok(profile: dict) -> dict:
 
 
 def monitor_positions(db: WatchedWalletDB, markets: List[dict]):
-    """Query recent trades for watched wallets and populate wallet_positions.
-    Only include positions with condition_ids that match valid Gamma markets."""
+    """Query recent trades for watched wallets and populate wallet_positions."""
     wallets = db.get_watchable(min_score=0)
     if not wallets:
         return
 
     vol_map = {}
-    valid_cids = set()
     for m in markets:
         cid = m.get("conditionId") or ""
-        mid = m.get("id") or m.get("slug", "")
         v = _market_volume(m)
         q = m.get("question", "")
         if cid:
-            valid_cids.add(cid)
             vol_map[cid] = (v, q)
-        if mid and mid != cid:
-            vol_map[mid] = (v, q)
 
     db.clear_stale_positions(max_age_hours=48)
     total_positions = 0
@@ -733,9 +727,6 @@ def monitor_positions(db: WatchedWalletDB, markets: List[dict]):
             if not cid or cid in seen_conditions:
                 continue
             seen_conditions.add(cid)
-
-            if cid not in valid_cids:
-                continue
 
             vol_info = vol_map.get(cid, (0, ""))
             market_vol = vol_info[0]
@@ -783,7 +774,7 @@ def run_scan(db: WatchedWalletDB, polygonscan: PolygonscanClient) -> dict:
 
     # Step 1: Fetch markets for obscure filtering
     print("→ Fetching markets...", file=sys.stderr)
-    raw_markets = gamma_get("/markets?limit=200&order=volume&ascending=false")
+    raw_markets = gamma_get("/markets?limit=500&order=volume&ascending=false")
     markets = raw_markets if isinstance(raw_markets, list) else []
     print(f"  {len(markets)} markets loaded", file=sys.stderr)
 
