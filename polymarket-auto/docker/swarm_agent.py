@@ -599,12 +599,11 @@ def risk_check(
         size = min(MAX_POSITION_USDC, 3.0 + wallet_score * 0.15)
 
     daily_exposure = brain.get_daily_exposure(agent_id)
-    if daily_exposure + size > MAX_DAILY_RISK:
-        remaining = MAX_DAILY_RISK - daily_exposure
-        if remaining < 3.0:
-            reasons.append(f"Daily exposure ${daily_exposure:.0f} at cap")
-        else:
-            size = remaining
+    remaining_daily = MAX_DAILY_RISK - daily_exposure
+    if remaining_daily < 3.0:
+        reasons.append(f"Daily exposure ${daily_exposure:.0f} at cap")
+    elif remaining_daily < size:
+        size = remaining_daily
 
     daily_pnl = brain.get_daily_pnl(agent_id)
     if daily_pnl < -30:
@@ -667,6 +666,14 @@ class SwarmAgent:
             f"\n◆ {self.agent_id} — cycle start {datetime.now().strftime('%H:%M:%S')}",
             file=sys.stderr,
         )
+
+        if self.executor:
+            balance = self.executor.get_balance()
+            if balance < 5.0:
+                print(
+                    f"  ⏸ Balance too low (${balance:.2f}) — skipping", file=sys.stderr
+                )
+                return
 
         markets = fetch_markets(200)
         edge_signals = detect_edge_signals(markets, self.category)
