@@ -48,8 +48,8 @@ from trade_executor import TradeExecutor
 # Config
 # ============================================================================
 
-BRAIN_DB = Path.home() / ".stealthtrace" / "swarm_brain.db"
-SIGNAL_DB = Path.home() / ".stealthtrace" / "signals.db"
+BRAIN_DB = Path(os.environ.get("BRAIN_DB_PATH", "/app/data/swarm_brain.db"))
+SIGNAL_DB = Path(os.environ.get("SIGNAL_DB_PATH", "/app/data/signals.db"))
 SCAN_INTERVAL = 900  # 15 minutes
 MAX_POSITION_USDC = 15.0  # max per trade
 MAX_DAILY_RISK = 60.0  # total daily exposure
