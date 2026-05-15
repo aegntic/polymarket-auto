@@ -62,9 +62,9 @@ MIN_TIME_TO_RESOLUTION_HOURS = 6
 PAPER_TRADE = os.environ.get("PAPER_TRADE", "1") == "1"
 STEALTH_MIN_WALLET_SCORE = 60
 STEALTH_MIN_WIN_RATE = 0.60
-VALUE_NO_MAX_PRICE = 0.18
-VALUE_YES_MIN_PROB = 0.75
-VALUE_YES_MAX_PROB = 0.92
+VALUE_NO_MAX_PRICE = 0.20
+VALUE_YES_MIN_PROB = 0.65
+VALUE_YES_MAX_PROB = 0.95
 BANKROLL_RISK_PCT = 0.05
 
 GAMMA_IP = "104.18.34.205"
@@ -355,33 +355,45 @@ def fetch_stealth_copy_signals(category_filter: str = None) -> list:
 
 
 def fetch_markets(limit: int = 100) -> list:
-    """Fetch Polymarket markets via DNS bypass."""
-    url = f"https://{HOST}/markets?limit={limit}"
-    try:
-        result = subprocess.run(
-            [
-                "curl",
-                "-s",
-                "--resolve",
-                f"{HOST}:443:{GAMMA_IP}",
-                url,
-                "-H",
-                f"Host: {HOST}",
-                "-H",
-                "User-Agent: PolyAgent/1.0",
-                "--max-time",
-                "15",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=20,
-        )
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            return data if isinstance(data, list) else []
-    except Exception:
-        pass
-    return []
+    """Fetch Polymarket markets via DNS bypass. Paginates to get more markets."""
+    all_markets = []
+    offset = 0
+    batch = 100
+    while offset < limit:
+        url = f"https://{HOST}/markets?limit={batch}&offset={offset}&active=true&closed=false&order=volume&ascending=false"
+        try:
+            result = subprocess.run(
+                [
+                    "curl",
+                    "-s",
+                    "--resolve",
+                    f"{HOST}:443:{GAMMA_IP}",
+                    url,
+                    "-H",
+                    f"Host: {HOST}",
+                    "-H",
+                    "User-Agent: PolyAgent/1.0",
+                    "--max-time",
+                    "15",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                if isinstance(data, list) and data:
+                    all_markets.extend(data)
+                    if len(data) < batch:
+                        break
+                else:
+                    break
+            else:
+                break
+        except Exception:
+            break
+        offset += batch
+    return all_markets
 
 
 def detect_edge_signals(markets: list, category_filter: str = None) -> list:
@@ -395,7 +407,7 @@ def detect_edge_signals(markets: list, category_filter: str = None) -> list:
     signals = []
     for m in markets:
         try:
-            vol = float(m.get("volume", 0) or 0)
+            vol = float(m.get("volumeNum", 0) or m.get("volume", 0) or 0)
         except (ValueError, TypeError):
             continue
         if vol < MIN_MARKET_VOLUME:
@@ -752,7 +764,7 @@ class SwarmAgent:
         else:
             self._available_balance = 70.0
 
-        markets = fetch_markets(200)
+        markets = fetch_markets(500)
         edge_signals = detect_edge_signals(markets, self.category)
 
         stealth_signals = fetch_stealth_copy_signals(self.category)
