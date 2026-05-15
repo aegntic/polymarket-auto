@@ -52,12 +52,12 @@ BRAIN_DB = Path(os.environ.get("BRAIN_DB_PATH", "/app/data/swarm_brain.db"))
 SIGNAL_DB = Path(os.environ.get("SIGNAL_DB_PATH", "/app/data/signals.db"))
 SCAN_INTERVAL = 900
 MAX_POSITION_USDC = 3.50
-MAX_DAILY_RISK_PCT = 0.15
+MAX_DAILY_RISK_PCT = 0.20
 MAX_TRADES_PER_CYCLE = 2
 MAX_OPEN_PER_CATEGORY = 2
 DUPLICATE_HOURS_EDGE = 8
 DUPLICATE_HOURS_STEALTH = 4
-MIN_MARKET_VOLUME = 5000
+MIN_MARKET_VOLUME = 1000
 MIN_TIME_TO_RESOLUTION_HOURS = 6
 PAPER_TRADE = os.environ.get("PAPER_TRADE", "1") == "1"
 STEALTH_MIN_WALLET_SCORE = 60
@@ -65,7 +65,8 @@ STEALTH_MIN_WIN_RATE = 0.60
 VALUE_NO_MAX_PRICE = 0.20
 VALUE_YES_MIN_PROB = 0.65
 VALUE_YES_MAX_PROB = 0.95
-BANKROLL_RISK_PCT = 0.05
+BANKROLL_RISK_PCT = 0.08
+MIN_TRADE_SIZE = 1.50
 
 GAMMA_IP = "104.18.34.205"
 HOST = "gamma-api.polymarket.com"
@@ -659,12 +660,12 @@ def risk_check(
         conviction_mult = 0.5 + (wallet_score / 100) * 0.5
         base_size = min(MAX_POSITION_USDC, max_bet * conviction_mult)
 
-    size = max(2.0, base_size)
+    size = max(MIN_TRADE_SIZE, base_size)
 
     daily_exposure = brain.get_daily_exposure(agent_id)
     max_daily = balance * MAX_DAILY_RISK_PCT
     remaining_daily = max_daily - daily_exposure
-    if remaining_daily < 2.0:
+    if remaining_daily < MIN_TRADE_SIZE:
         reasons.append(f"daily exposure ${daily_exposure:.1f} at {max_daily:.1f} cap")
     elif remaining_daily < size:
         size = remaining_daily
@@ -831,7 +832,7 @@ class SwarmAgent:
                 continue
 
             size = min(size, self._available_balance * 0.95)
-            if size < 2.0:
+            if size < MIN_TRADE_SIZE:
                 print(
                     f"  ⏸ Remaining balance ${self._available_balance:.2f} too low",
                     file=sys.stderr,
