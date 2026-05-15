@@ -699,18 +699,24 @@ def analyze_with_grok(profile: dict) -> dict:
 
 
 def monitor_positions(db: WatchedWalletDB, markets: List[dict]):
-    """Query recent trades for watched wallets and populate wallet_positions."""
+    """Query recent trades for watched wallets and populate wallet_positions.
+    Only include positions with condition_ids that match valid Gamma markets."""
     wallets = db.get_watchable(min_score=0)
     if not wallets:
         return
 
     vol_map = {}
+    valid_cids = set()
     for m in markets:
-        mid = m.get("conditionId") or m.get("id") or m.get("slug", "")
+        cid = m.get("conditionId") or ""
+        mid = m.get("id") or m.get("slug", "")
         v = _market_volume(m)
         q = m.get("question", "")
-        if mid and v:
-            vol_map[str(mid)] = (v, q)
+        if cid:
+            valid_cids.add(cid)
+            vol_map[cid] = (v, q)
+        if mid and mid != cid:
+            vol_map[mid] = (v, q)
 
     db.clear_stale_positions(max_age_hours=48)
     total_positions = 0
@@ -728,7 +734,10 @@ def monitor_positions(db: WatchedWalletDB, markets: List[dict]):
                 continue
             seen_conditions.add(cid)
 
-            vol_info = vol_map.get(str(cid), (0, ""))
+            if cid not in valid_cids:
+                continue
+
+            vol_info = vol_map.get(cid, (0, ""))
             market_vol = vol_info[0]
             question = vol_info[1] or t.get("title") or t.get("market_slug") or ""
 
@@ -743,7 +752,7 @@ def monitor_positions(db: WatchedWalletDB, markets: List[dict]):
             except (ValueError, TypeError):
                 size = 0
 
-            if size <= 0:
+            if size <= 0 or price < 0.05:
                 continue
 
             db.upsert_position(
