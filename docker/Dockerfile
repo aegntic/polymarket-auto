@@ -14,6 +14,7 @@ COPY stealthtrace.py /app/
 COPY stealthwatch.py /app/
 COPY swarm_agent.py /app/
 COPY trade_executor.py /app/
+COPY portfolio_status.py /app/
 COPY requirements.txt /app/
 
 RUN pip install --no-cache-dir -r requirements.txt && \
