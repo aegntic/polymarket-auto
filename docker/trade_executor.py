@@ -367,6 +367,59 @@ class TradeExecutor:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def sell_order(
+        self,
+        condition_id: str,
+        outcome: str,
+        price: float,
+        size_shares: int,
+    ) -> dict:
+        if not self.w3.is_connected():
+            return {"success": False, "error": "RPC not connected"}
+
+        try:
+            market = self._get_market_info(condition_id)
+            token_id = self._get_token_id(condition_id, outcome, market)
+            min_size = int(market.get("minimum_order_size", 5))
+            size_shares = max(min_size, size_shares)
+            price = max(0.01, price)
+            tick_size = self._get_tick_size(token_id, market)
+            neg_risk = self._get_neg_risk(token_id, market)
+
+            self._ensure_balance_synced()
+
+            resp = self.clob.create_and_post_order(
+                order_args=V2OrderArgs(
+                    token_id=token_id,
+                    price=price,
+                    size=size_shares,
+                    side=Side.SELL,
+                ),
+                options=PartialCreateOrderOptions(
+                    tick_size=tick_size,
+                    neg_risk=neg_risk,
+                ),
+                order_type=OrderType.GTC,
+            )
+
+            if resp and (resp.get("success") or resp.get("orderID")):
+                return {
+                    "success": True,
+                    "tx_hash": resp.get("transactionHash", "clob_api"),
+                    "order_id": resp.get("orderID", ""),
+                    "details": f"SELL {size_shares} @ {price} | {outcome}",
+                }
+            else:
+                error_msg = (
+                    resp.get("error", resp.get("errorMsg", "order rejected"))
+                    if resp
+                    else "no response"
+                )
+                return {"success": False, "error": error_msg}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def cancel_order(self, order_id: str) -> dict:
         try:
             resp = self.clob.cancel_order(OrderPayload(orderID=order_id))
