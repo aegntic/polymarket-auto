@@ -669,11 +669,14 @@ class SwarmAgent:
 
         if self.executor:
             balance = self.executor.get_balance()
-            if balance < 5.0:
+            if balance < 3.0:
                 print(
                     f"  ⏸ Balance too low (${balance:.2f}) — skipping", file=sys.stderr
                 )
                 return
+            self._available_balance = balance
+        else:
+            self._available_balance = MAX_POSITION_USDC
 
         markets = fetch_markets(200)
         edge_signals = detect_edge_signals(markets, self.category)
@@ -746,6 +749,14 @@ class SwarmAgent:
                 )
                 continue
 
+            size = min(size, self._available_balance)
+            if size < 3.0:
+                print(
+                    f"  ⏸ Remaining balance ${self._available_balance:.2f} too low",
+                    file=sys.stderr,
+                )
+                break
+
             outcome = signal.get("best_side", "YES")
             if signal.get("yes_price", 0.5) > 0.50 and "best_side" not in signal:
                 outcome = "NO"
@@ -798,6 +809,7 @@ class SwarmAgent:
             )
 
             if result.get("success"):
+                self._available_balance -= trade_size
                 send_telegram(
                     f"🤖 <b>PolyAgent</b> [{self.category}]\n"
                     f"{outcome} {price_label:.3f} × ${trade_size:.2f}\n"
