@@ -141,6 +141,7 @@ class WatchedWalletDB:
                 price REAL,
                 first_seen_at TEXT,
                 market_volume REAL,
+                UNIQUE(wallet_address, condition_id),
                 FOREIGN KEY (wallet_address) REFERENCES watched_wallets(address)
             );
             CREATE TABLE IF NOT EXISTS scan_log (
@@ -258,7 +259,9 @@ class WatchedWalletDB:
             INSERT INTO wallet_positions (wallet_address, condition_id, question, outcome,
                 size_usdc, price, first_seen_at, market_volume)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT DO NOTHING
+            ON CONFLICT(wallet_address, condition_id) DO UPDATE SET
+                size_usdc=excluded.size_usdc, price=excluded.price,
+                market_volume=excluded.market_volume, question=excluded.question
         """,
             (
                 wallet_address,

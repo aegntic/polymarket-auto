@@ -51,10 +51,13 @@ from trade_executor import TradeExecutor
 BRAIN_DB = Path.home() / ".stealthtrace" / "swarm_brain.db"
 SIGNAL_DB = Path.home() / ".stealthtrace" / "signals.db"
 SCAN_INTERVAL = 900  # 15 minutes
-MAX_POSITION_USDC = 10.0  # max per trade
-MAX_DAILY_RISK = 40.0  # total daily exposure
-MIN_EDGE_DEVIATION = 0.25  # minimum price deviation for edge
-MIN_CONFIDENCE = 25
+MAX_POSITION_USDC = 15.0  # max per trade
+MAX_DAILY_RISK = 60.0  # total daily exposure
+MAX_TRADES_PER_CYCLE = 3  # diversify across top signals
+MIN_EDGE_DEVIATION = 0.15  # lower threshold = more signals
+MIN_CONFIDENCE = 15  # lower floor, especially for stealth
+DUPLICATE_HOURS_EDGE = 4  # avoid re-trading same market (edge signals)
+DUPLICATE_HOURS_STEALTH = 2  # shorter window for stealth (timing matters)
 
 GAMMA_IP = "104.18.34.205"
 HOST = "gamma-api.polymarket.com"
@@ -261,49 +264,71 @@ STEALTH_DB = Path(os.environ.get("STEALTH_DB_PATH", "/app/data/watched_wallets.d
 
 
 def fetch_stealth_copy_signals(category_filter: str = None) -> list:
-    """Read watched wallets' recent obscure trades from shared DB.
-    Returns signals matching the same format as detect_edge_signals()."""
+    """Read watched wallets' recent trades from shared DB.
+    Returns signals with wallet_score for risk bypass."""
     if not STEALTH_DB.exists():
         return []
 
     signals = []
+    seen = set()
     try:
         conn = sqlite3.connect(str(STEALTH_DB), timeout=5)
         conn.row_factory = sqlite3.Row
 
         wallets = conn.execute(
             "SELECT * FROM watched_wallets WHERE active = 1 AND blacklisted = 0 "
-            "AND copy_action IN ('AUTO_WATCH', 'MONITOR_FUNDING') AND score >= 50 "
+            "AND copy_action IN ('AUTO_WATCH', 'MONITOR_FUNDING') AND score >= 45 "
             "ORDER BY score DESC LIMIT 10"
         ).fetchall()
 
         for w in wallets:
             positions = conn.execute(
                 "SELECT * FROM wallet_positions WHERE wallet_address = ? "
-                "ORDER BY first_seen_at DESC LIMIT 5",
+                "ORDER BY first_seen_at DESC LIMIT 10",
                 (w["address"],),
             ).fetchall()
 
             for p in positions:
+                cid = p["condition_id"] or ""
+                if cid in seen:
+                    continue
+                seen.add(cid)
+
                 q = p["question"] or ""
                 cat = categorize(q)
                 if category_filter and cat != category_filter:
                     continue
 
+                price = p["price"] or 0.5
+                if price < 0.10:
+                    continue
+
                 size_pct = w["suggested_size_pct"] or 1.5
                 our_size = min(MAX_POSITION_USDC, 100 * size_pct / 100)
 
+                yes_p = price if p["outcome"] == "YES" else (1.0 - price)
+                no_p = 1.0 - yes_p
+                best_side = p["outcome"] or "YES"
+                best_price = price if best_side == "YES" else no_p
+                dev = abs(yes_p - 0.50)
+
                 signals.append(
                     {
-                        "market_id": p["condition_id"] or "",
+                        "market_id": cid,
                         "question": q,
                         "volume": p["market_volume"] or 0,
-                        "yes_price": p["price"] or 0.5,
-                        "deviation": abs((p["price"] or 0.5) - 0.50),
+                        "yes_price": yes_p,
+                        "no_price": no_p,
+                        "deviation": dev,
+                        "best_side": best_side,
+                        "best_price": best_price,
+                        "edge_score": dev * 50 + w["score"],
                         "category": cat,
                         "slug": "",
                         "source": f"stealth_copy:{w['address'][:10]}:{w['score']}pts",
                         "copy_size": our_size,
+                        "is_stealth": True,
+                        "wallet_score": w["score"],
                     }
                 )
 
@@ -311,6 +336,7 @@ def fetch_stealth_copy_signals(category_filter: str = None) -> list:
     except Exception:
         pass
 
+    signals.sort(key=lambda s: s.get("wallet_score", 0), reverse=True)
     return signals
 
 
@@ -350,7 +376,8 @@ def fetch_markets(limit: int = 100) -> list:
 
 
 def detect_edge_signals(markets: list, category_filter: str = None) -> list:
-    """Detect HIGH edge signals from market data."""
+    """Detect edge signals. Score by expected ROI: prefer high-probability outcomes
+    that are mispriced. Buying NO at 0.90 on a market priced at 0.75 = 15% edge."""
     signals = []
     for m in markets:
         try:
@@ -370,13 +397,15 @@ def detect_edge_signals(markets: list, category_filter: str = None) -> list:
             continue
         try:
             yes = float(prices_raw[0])
+            no = float(prices_raw[1])
         except (ValueError, TypeError):
+            continue
+
+        if yes < 0.05 or yes > 0.95:
             continue
 
         dev = abs(yes - 0.50)
         if dev < MIN_EDGE_DEVIATION:
-            continue
-        if yes < 0.10 or yes > 0.90:
             continue
 
         question = m.get("question", "")
@@ -384,19 +413,31 @@ def detect_edge_signals(markets: list, category_filter: str = None) -> list:
         if category_filter and cat != category_filter:
             continue
 
+        best_side = "NO" if yes > 0.50 else "YES"
+        best_price = no if best_side == "NO" else yes
+        if best_price < 0.10:
+            continue
+
+        ev_multiplier = 1.0 / best_price if best_price > 0 else 0
+        edge_score = dev * ev_multiplier * 100
+
         signals.append(
             {
                 "market_id": m.get("conditionId", ""),
                 "question": question,
                 "volume": vol,
                 "yes_price": yes,
+                "no_price": no,
                 "deviation": dev,
+                "best_side": best_side,
+                "best_price": best_price,
+                "edge_score": edge_score,
                 "category": cat,
                 "slug": m.get("slug", ""),
             }
         )
 
-    signals.sort(key=lambda s: s["deviation"], reverse=True)
+    signals.sort(key=lambda s: s["edge_score"], reverse=True)
     return signals
 
 
@@ -541,34 +582,45 @@ def categorize(question: str) -> str:
 
 
 def risk_check(
-    signal: dict, brain: SwarmBrain, agent_id: str
+    signal: dict, brain: SwarmBrain, agent_id: str, is_stealth: bool = False
 ) -> tuple[bool, str, float]:
     """Run pre-trade risk checks. Returns (allowed, reason, adjusted_size)."""
     reasons = []
-    size = min(MAX_POSITION_USDC, signal["volume"] * 0.01)  # 1% of market volume
 
-    # Daily exposure
+    best_price = signal.get("best_price", signal.get("yes_price", 0.5))
+    dev = signal["deviation"]
+
+    base_size = min(MAX_POSITION_USDC, signal["volume"] * 0.01)
+    kelly = min(base_size, base_size * (dev / best_price) * 2)
+    size = max(3.0, min(MAX_POSITION_USDC, kelly))
+
+    if is_stealth:
+        wallet_score = signal.get("wallet_score", 50)
+        size = min(MAX_POSITION_USDC, 3.0 + wallet_score * 0.15)
+
     daily_exposure = brain.get_daily_exposure(agent_id)
     if daily_exposure + size > MAX_DAILY_RISK:
-        reasons.append(
-            f"Daily exposure ${daily_exposure:.0f} + ${size:.0f} > ${MAX_DAILY_RISK}"
-        )
+        remaining = MAX_DAILY_RISK - daily_exposure
+        if remaining < 3.0:
+            reasons.append(f"Daily exposure ${daily_exposure:.0f} at cap")
+        else:
+            size = remaining
 
-    # Daily loss
     daily_pnl = brain.get_daily_pnl(agent_id)
-    if daily_pnl < -20:
+    if daily_pnl < -30:
         reasons.append(f"Daily loss ${abs(daily_pnl):.0f} exceeds limit")
 
-    # Duplicate check
-    recent = brain.get_recent_trades(agent_id, hours=6)
+    dup_hours = DUPLICATE_HOURS_STEALTH if is_stealth else DUPLICATE_HOURS_EDGE
+    recent = brain.get_recent_trades(agent_id, hours=dup_hours)
     for trade in recent:
         if trade["market_id"] == signal["market_id"]:
-            reasons.append(f"Already traded this market in last 6h")
+            reasons.append(f"Already traded this market in last {dup_hours}h")
+            break
 
-    # Confidence floor
-    confidence = signal["deviation"] * 100  # crude proxy
-    if confidence < MIN_CONFIDENCE:
-        reasons.append(f"Confidence {confidence:.0f}% below {MIN_CONFIDENCE}%")
+    if not is_stealth:
+        confidence = dev * 100
+        if confidence < MIN_CONFIDENCE:
+            reasons.append(f"Confidence {confidence:.0f}% below {MIN_CONFIDENCE}%")
 
     if reasons:
         return False, "; ".join(reasons), 0
@@ -610,109 +662,133 @@ class SwarmAgent:
         self.executor = TradeExecutor(private_key) if private_key else None
 
     def run_cycle(self):
-        """Single decision cycle: scan → decide → execute → learn."""
+        """Single decision cycle: scan → rank → execute top N → learn."""
         print(
             f"\n◆ {self.agent_id} — cycle start {datetime.now().strftime('%H:%M:%S')}",
             file=sys.stderr,
         )
 
-        # 1. Scan for signals
-        markets = fetch_markets(100)
-        signals = detect_edge_signals(markets, self.category)
+        markets = fetch_markets(200)
+        edge_signals = detect_edge_signals(markets, self.category)
 
-        # 2. Merge stealth copy signals
         stealth_signals = fetch_stealth_copy_signals(self.category)
         if stealth_signals:
             print(f"  {len(stealth_signals)} stealth copy signals", file=sys.stderr)
-            seen_ids = {s["market_id"] for s in signals}
-            for ss in stealth_signals:
-                if ss["market_id"] not in seen_ids:
-                    signals.append(ss)
-                    seen_ids.add(ss["market_id"])
 
-        print(
-            f"  {len(signals)} total edge signals in {self.category}", file=sys.stderr
+        all_signals = []
+        seen_ids = set()
+        for s in stealth_signals:
+            if s["market_id"] not in seen_ids:
+                all_signals.append(s)
+                seen_ids.add(s["market_id"])
+        for s in edge_signals:
+            if s["market_id"] not in seen_ids:
+                all_signals.append(s)
+                seen_ids.add(s["market_id"])
+
+        all_signals.sort(
+            key=lambda s: (
+                1 if s.get("is_stealth") else 0,
+                s.get("edge_score", s.get("deviation", 0) * 100),
+            ),
+            reverse=True,
         )
 
-        if not signals:
+        print(
+            f"  {len(all_signals)} signals ({len(stealth_signals)} stealth + {len(edge_signals)} edge) in {self.category}",
+            file=sys.stderr,
+        )
+
+        if not all_signals:
             self._log_learning("No edge signals found — market is efficient")
             return
 
-        # 2. Load past learnings for context
         learnings = self.brain.get_learnings(self.category, limit=5)
-        learning_context = (
-            "; ".join([l["insight"] for l in learnings]) if learnings else "none"
-        )
 
-        # 3. For top signal: risk check → execute
-        top = signals[0]
-        allowed, reason, size = risk_check(top, self.brain, self.agent_id)
+        executed = 0
+        for signal in all_signals:
+            if executed >= MAX_TRADES_PER_CYCLE:
+                break
 
-        if not allowed:
-            print(f"  ✗ Blocked: {reason}", file=sys.stderr)
-            return
-
-        # 4. Execute trade
-        outcome = "NO" if top["yes_price"] > 0.50 else "YES"
-        trade_size = top.get("copy_size", size)
-        trade_id = hashlib.md5(
-            f"{self.agent_id}{top['market_id']}{time.time()}".encode()
-        ).hexdigest()[:16]
-
-        print(
-            f"  ▶ {outcome} on {top['question'][:60]} at {top['yes_price']:.3f} for ${trade_size:.2f}",
-            file=sys.stderr,
-        )
-        if top.get("source"):
-            print(f"    source: {top['source']}", file=sys.stderr)
-
-        result = {"success": False, "error": "dry run — no private key"}
-        if self.executor:
-            result = self.executor.place_order(
-                top["market_id"], outcome, top["yes_price"], trade_size
+            is_stealth = signal.get("is_stealth", False)
+            allowed, reason, size = risk_check(
+                signal, self.brain, self.agent_id, is_stealth=is_stealth
             )
 
-        # 5. Log trade
-        trade = {
-            "id": trade_id,
-            "agent_id": self.agent_id,
-            "category": self.category,
-            "market_id": top["market_id"],
-            "question": top["question"][:120],
-            "outcome": outcome,
-            "price": top["yes_price"],
-            "size": size,
-            "tx_hash": result.get("tx_hash"),
-            "status": "filled" if result.get("success") else "failed",
-            "edge_deviation": top["deviation"],
-            "confidence": top["deviation"] * 100,
-            "notes": f"signal_dev={top['deviation']:.2f} vol=${top['volume']:.0f} {reason}",
-        }
-        self.brain.log_trade(trade)
+            if not allowed:
+                print(
+                    f"  ✗ {signal['question'][:45]}... Blocked: {reason}",
+                    file=sys.stderr,
+                )
+                continue
 
-        # 6. Update agent state
-        self.brain.update_agent_state(
-            self.agent_id,
-            {
-                "last_trade": datetime.now(timezone.utc).isoformat(),
-                "daily_trades": self.brain.get_daily_exposure(self.agent_id)
-                / max(size, 1),
-            },
-        )
+            outcome = signal.get("best_side", "YES")
+            if signal.get("yes_price", 0.5) > 0.50 and "best_side" not in signal:
+                outcome = "NO"
+            elif signal.get("yes_price", 0.5) <= 0.50 and "best_side" not in signal:
+                outcome = "YES"
 
-        # 7. Telegram confirmation
-        if result.get("success"):
-            send_telegram(
-                f"🤖 <b>PolyAgent Trade</b> [{self.category}]\n"
-                f"{outcome} {top['yes_price']:.3f} × ${size:.2f}\n"
-                f"<b>{top['question'][:80]}</b>\n"
-                f"TX: <code>{result['tx_hash'][:16]}...</code>"
+            trade_size = signal.get("copy_size", size) if is_stealth else size
+            trade_id = hashlib.md5(
+                f"{self.agent_id}{signal['market_id']}{time.time()}".encode()
+            ).hexdigest()[:16]
+
+            src_tag = f" [{signal.get('source', '')}]" if signal.get("source") else ""
+            price_label = signal.get("best_price", signal.get("yes_price", 0))
+            print(
+                f"  ▶ {outcome} on {signal['question'][:55]} at {price_label:.3f} for ${trade_size:.2f}{src_tag}",
+                file=sys.stderr,
             )
-            self._log_learning(
-                f"EXECUTED {outcome} on {top['question'][:40]} — monitoring outcome"
+
+            result = {"success": False, "error": "dry run — no private key"}
+            if self.executor:
+                result = self.executor.place_order(
+                    signal["market_id"],
+                    outcome,
+                    signal.get("yes_price", 0.5),
+                    trade_size,
+                )
+
+            trade = {
+                "id": trade_id,
+                "agent_id": self.agent_id,
+                "category": self.category,
+                "market_id": signal["market_id"],
+                "question": signal["question"][:120],
+                "outcome": outcome,
+                "price": price_label,
+                "size": trade_size,
+                "tx_hash": result.get("tx_hash"),
+                "status": "filled" if result.get("success") else "failed",
+                "edge_deviation": signal["deviation"],
+                "confidence": signal.get("edge_score", signal["deviation"] * 100),
+                "notes": f"{'stealth' if is_stealth else 'edge'} dev={signal['deviation']:.2f} vol=${signal['volume']:.0f} {reason}",
+            }
+            self.brain.log_trade(trade)
+
+            self.brain.update_agent_state(
+                self.agent_id,
+                {
+                    "last_trade": datetime.now(timezone.utc).isoformat(),
+                },
             )
-        else:
-            print(f"  ✗ Failed: {result.get('error', 'unknown')}", file=sys.stderr)
+
+            if result.get("success"):
+                send_telegram(
+                    f"🤖 <b>PolyAgent</b> [{self.category}]\n"
+                    f"{outcome} {price_label:.3f} × ${trade_size:.2f}\n"
+                    f"<b>{signal['question'][:80]}</b>\n"
+                    f"{'🔍 stealth' if is_stealth else '📊 edge'} | dev={signal['deviation']:.2f}"
+                )
+                self._log_learning(
+                    f"EXECUTED {outcome} on {signal['question'][:40]} — monitoring"
+                )
+                executed += 1
+            else:
+                print(f"  ✗ Failed: {result.get('error', 'unknown')}", file=sys.stderr)
+
+        if executed == 0:
+            print(f"  → No trades this cycle", file=sys.stderr)
 
     def _log_learning(self, insight: str):
         self.brain.add_learning(self.agent_id, self.category, insight)
