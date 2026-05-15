@@ -749,7 +749,7 @@ class SwarmAgent:
                 )
                 continue
 
-            size = min(size, self._available_balance)
+            size = min(size, self._available_balance * 0.95)
             if size < 3.0:
                 print(
                     f"  ⏸ Remaining balance ${self._available_balance:.2f} too low",
