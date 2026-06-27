@@ -63,10 +63,8 @@ HOST = "gamma-api.polymarket.com"
 WM_BASE = os.environ.get("WORLDMONITOR_URL", "https://worldmonitor.app")
 WM_CACHE_TTL = 300  # 5 minutes
 
-TELEGRAM_TOKEN = os.environ.get(
-    "TELEGRAM_BOT_TOKEN", "BOT_TOKEN_REDACTED"
-)
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "CHAT_ID_REDACTED")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 
 # ============================================================================

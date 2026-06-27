@@ -33,8 +33,8 @@ HOST = "gamma-api.polymarket.com"
 SCAN_INTERVAL = 900  # 15 minutes
 STATE_FILE = Path.home() / ".stealthwatch_state.json"
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "BOT_TOKEN_REDACTED")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_HOME_CHANNEL", os.environ.get("TELEGRAM_ALLOWED_USERS", "CHAT_ID_REDACTED"))
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_HOME_CHANNEL", os.environ.get("TELEGRAM_ALLOWED_USERS", ""))
 
 # Edge detection thresholds
 VOLUME_MAX = 100_000

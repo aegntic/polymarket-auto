@@ -71,10 +71,8 @@ MIN_TRADE_SIZE = 1.50
 GAMMA_IP = "104.18.34.205"
 HOST = "gamma-api.polymarket.com"
 
-TELEGRAM_TOKEN = os.environ.get(
-    "TELEGRAM_BOT_TOKEN", "BOT_TOKEN_REDACTED"
-)
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "CHAT_ID_REDACTED")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 
 # ============================================================================
