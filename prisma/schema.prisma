@@ -53,6 +53,10 @@ model Trade {
   isAgentTrade Boolean @default(false)
   agentReasoning String?
   status      String   @default("filled") // filled, pending, cancelled
+  edgeAtEntry Float?
+  confidence  Float?
+  strategy    String?
+  resolvedAt  DateTime?
   createdAt   DateTime @default(now())
   wallet      Wallet   @relation(fields: [walletId], references: [id])
   market      Market   @relation(fields: [marketId], references: [id])
