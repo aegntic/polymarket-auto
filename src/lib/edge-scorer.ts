@@ -1,13 +1,35 @@
 // Multi-signal edge scoring engine
-// Fuses price momentum, volume, wallet activity, and Grok analysis
-// into a single edge score per market. No duplication — uses existing
-// polymarket-api.ts for data and Grok for reasoning.
+// Fuses price momentum, volume, wallet activity, WorldMonitor intelligence,
+// and Grok analysis into a single edge score per market.
 
 import { fetchMarkets, normalizeMarket, type PolymarketMarket } from '@/lib/polymarket-api'
 import { db } from '@/lib/db'
 import { logger } from './logger'
+import {
+  fetchIntelSnapshot,
+  computeGeopoliticalSentiment,
+  computeMarketBias,
+  type WMIntelligenceSnapshot,
+} from './worldmonitor-adapter'
 
 const XAI_API_KEY = process.env.XAI_API_KEY
+
+let wmSnapshot: WMIntelligenceSnapshot | null = null
+let wmSnapshotTs = 0
+const WM_REFRESH_MS = 5 * 60 * 1000
+
+async function getWMSnapshot(): Promise<WMIntelligenceSnapshot | null> {
+  if (wmSnapshot && Date.now() - wmSnapshotTs < WM_REFRESH_MS) return wmSnapshot
+  try {
+    wmSnapshot = await fetchIntelSnapshot()
+    wmSnapshotTs = Date.now()
+    logger.info('EdgeScorer', `WorldMonitor snapshot loaded: ${wmSnapshot.riskScores.length} risk scores, ${wmSnapshot.crossSourceSignals.length} signals, ${wmSnapshot.marketImplications.length} implications`)
+    return wmSnapshot
+  } catch (err: any) {
+    logger.warn('EdgeScorer', `WorldMonitor fetch failed: ${err.message}`)
+    return wmSnapshot
+  }
+}
 
 // --- Types ---
 
@@ -16,6 +38,8 @@ export interface SignalSet {
   volumeSurge: number       // 0 to 1 (how current volume compares to baseline)
   walletConviction: number  // 0 to 1 (edge trader activity on this market)
   liquidityDepth: number    // 0 to 1 (how much liquidity supports entry/exit)
+  geopoliticalRisk: number  // 0 to 1 (WorldMonitor aggregated risk)
+  marketBias: number        // -1 to 1 (WorldMonitor market implications direction)
 }
 
 export interface MarketEdgeScore {
@@ -87,6 +111,20 @@ async function analyzeWithGrok(market: PolymarketMarket, signals: SignalSet): Pr
 
   const yesPrice = parseFloat(market.outcomePrices?.[0] || '0.5') || 0.5
 
+  const wm = await getWMSnapshot()
+  const geoSentiment = wm ? computeGeopoliticalSentiment(wm.riskScores, wm.crossSourceSignals) : null
+  const mktBias = wm ? computeMarketBias(wm.marketImplications) : null
+
+  const geoContext = geoSentiment
+    ? `\nGeopolitical context: ${geoSentiment.label} (${(geoSentiment.score * 100).toFixed(0)}%) — hot zones: ${geoSentiment.relevantCountries.join(', ') || 'none'}`
+    : ''
+  const mktContext = mktBias && mktBias.confidence > 0
+    ? `\nMarket bias: ${mktBias.direction} (${(mktBias.confidence * 100).toFixed(0)}%) — drivers: ${mktBias.drivers.slice(0, 3).join('; ')}`
+    : ''
+  const crossSignals = wm?.crossSourceSignals.length
+    ? `\nActive cross-source alerts: ${wm.crossSourceSignals.slice(0, 3).map(s => s.summary).join('; ')}`
+    : ''
+
   const prompt = `You are a Polymarket edge analyst. Score this market.
 
 Market: ${market.question}
@@ -94,12 +132,15 @@ Category: ${market.tags?.[0] || 'unknown'}
 Volume: $${Math.round(market.volume || 0).toLocaleString()}
 Liquidity: $${Math.round(market.liquidity || 0).toLocaleString()}
 Current YES price: ${yesPrice.toFixed(3)}
+${geoContext}${mktContext}${crossSignals}
 
 Quantitative signals (0-1 scale):
 - Price momentum: ${signals.priceMomentum.toFixed(3)}
 - Volume surge: ${signals.volumeSurge.toFixed(3)}
 - Wallet conviction: ${signals.walletConviction.toFixed(3)}
 - Liquidity depth: ${signals.liquidityDepth.toFixed(3)}
+- Geopolitical risk: ${signals.geopoliticalRisk.toFixed(3)}
+- Market bias: ${signals.marketBias.toFixed(3)}
 
 Tasks:
 1. Estimate the TRUE probability of YES resolving (independent of market price)
@@ -169,7 +210,10 @@ function getRecommendation(edgeBps: number, confidence: number): 'STRONG_BUY' | 
 export async function scoreMarket(market: PolymarketMarket): Promise<MarketEdgeScore> {
   const yesPrice = parseFloat(market.outcomePrices?.[0] || '0.5') || 0.5
 
-  // Build signals
+  const wm = await getWMSnapshot()
+  const geoSentiment = wm ? computeGeopoliticalSentiment(wm.riskScores, wm.crossSourceSignals) : null
+  const mktBias = wm ? computeMarketBias(wm.marketImplications) : null
+
   const signals: SignalSet = {
     priceMomentum: calcPriceMomentum(
       Array.isArray(market.outcomePrices) ? market.outcomePrices : []
@@ -177,6 +221,12 @@ export async function scoreMarket(market: PolymarketMarket): Promise<MarketEdgeS
     volumeSurge: calcVolumeSurge(market.volume || 0),
     walletConviction: await calcWalletConviction(market.conditionId),
     liquidityDepth: calcLiquidityDepth(market.liquidity || 0),
+    geopoliticalRisk: geoSentiment?.score ?? 0,
+    marketBias: mktBias
+      ? mktBias.direction === 'bullish' ? mktBias.confidence
+        : mktBias.direction === 'bearish' ? -mktBias.confidence
+        : 0
+      : 0,
   }
 
   // Grok analysis

@@ -36,6 +36,7 @@ from typing import Optional
 
 try:
     import requests
+    from urllib.parse import quote as url_quote
 except ImportError:
     print("ERROR: pip install requests")
     sys.exit(1)
@@ -59,13 +60,19 @@ MIN_CONFIDENCE = 60
 GAMMA_IP = "104.18.34.205"
 HOST = "gamma-api.polymarket.com"
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "BOT_TOKEN_REDACTED")
+WM_BASE = os.environ.get("WORLDMONITOR_URL", "https://worldmonitor.app")
+WM_CACHE_TTL = 300  # 5 minutes
+
+TELEGRAM_TOKEN = os.environ.get(
+    "TELEGRAM_BOT_TOKEN", "BOT_TOKEN_REDACTED"
+)
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "CHAT_ID_REDACTED")
 
 
 # ============================================================================
 # Swarm Brain (shared learning DB)
 # ============================================================================
+
 
 class SwarmBrain:
     """Shared SQLite brain for all swarm agents. Tracks trades, PnL, strategies."""
@@ -132,18 +139,29 @@ class SwarmBrain:
         self.conn.commit()
 
     def log_trade(self, trade: dict):
-        self.conn.execute("""
+        self.conn.execute(
+            """
             INSERT OR REPLACE INTO trades (id, agent_id, category, market_id, question,
                 outcome, price, size, tx_hash, status, edge_deviation, confidence, executed_at, notes)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            trade["id"], trade["agent_id"], trade["category"], trade["market_id"],
-            trade["question"], trade["outcome"], trade["price"], trade["size"],
-            trade.get("tx_hash"), trade.get("status", "pending"),
-            trade.get("edge_deviation"), trade.get("confidence"),
-            trade.get("executed_at", datetime.now(timezone.utc).isoformat()),
-            trade.get("notes"),
-        ))
+        """,
+            (
+                trade["id"],
+                trade["agent_id"],
+                trade["category"],
+                trade["market_id"],
+                trade["question"],
+                trade["outcome"],
+                trade["price"],
+                trade["size"],
+                trade.get("tx_hash"),
+                trade.get("status", "pending"),
+                trade.get("edge_deviation"),
+                trade.get("confidence"),
+                trade.get("executed_at", datetime.now(timezone.utc).isoformat()),
+                trade.get("notes"),
+            ),
+        )
         self.conn.commit()
 
     def update_pnl(self, trade_id: str, pnl: float, status: str = "resolved"):
@@ -176,10 +194,18 @@ class SwarmBrain:
         ).fetchall()
         return [dict(row) for row in rows]
 
-    def add_learning(self, agent_id: str, category: str, insight: str, pnl_impact: float = 0):
+    def add_learning(
+        self, agent_id: str, category: str, insight: str, pnl_impact: float = 0
+    ):
         self.conn.execute(
             "INSERT INTO learnings (agent_id, category, insight, pnl_impact, created_at) VALUES (?, ?, ?, ?, ?)",
-            (agent_id, category, insight, pnl_impact, datetime.now(timezone.utc).isoformat()),
+            (
+                agent_id,
+                category,
+                insight,
+                pnl_impact,
+                datetime.now(timezone.utc).isoformat(),
+            ),
         )
         self.conn.commit()
 
@@ -202,9 +228,17 @@ class SwarmBrain:
             )
         else:
             defaults = {
-                "agent_id": agent_id, "category": "", "capital": 0, "peak_capital": 0,
-                "daily_pnl": 0, "daily_trades": 0, "total_trades": 0, "win_rate": 0,
-                "last_scan": None, "last_trade": None, "status": "active",
+                "agent_id": agent_id,
+                "category": "",
+                "capital": 0,
+                "peak_capital": 0,
+                "daily_pnl": 0,
+                "daily_trades": 0,
+                "total_trades": 0,
+                "win_rate": 0,
+                "last_scan": None,
+                "last_trade": None,
+                "status": "active",
             }
             defaults.update(updates)
             cols = ", ".join(defaults.keys())
@@ -226,14 +260,28 @@ class SwarmBrain:
 # Signal Detection
 # ============================================================================
 
+
 def fetch_markets(limit: int = 100) -> list:
     """Fetch Polymarket markets via DNS bypass."""
     url = f"https://{HOST}/markets?limit={limit}"
     try:
         result = subprocess.run(
-            ["curl", "-s", "--resolve", f"{HOST}:443:{GAMMA_IP}", url,
-             "-H", f"Host: {HOST}", "-H", "User-Agent: PolyAgent/1.0", "--max-time", "15"],
-            capture_output=True, text=True, timeout=20,
+            [
+                "curl",
+                "-s",
+                "--resolve",
+                f"{HOST}:443:{GAMMA_IP}",
+                url,
+                "-H",
+                f"Host: {HOST}",
+                "-H",
+                "User-Agent: PolyAgent/1.0",
+                "--max-time",
+                "15",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
         )
         if result.returncode == 0:
             data = json.loads(result.stdout)
@@ -251,13 +299,15 @@ def detect_edge_signals(markets: list, category_filter: str = None) -> list:
             vol = float(m.get("volume", 0) or 0)
         except (ValueError, TypeError):
             continue
-        if vol < 50 or vol > 100000:
+        if vol < 50:
             continue
 
         prices_raw = m.get("outcomePrices", "[]")
         if isinstance(prices_raw, str):
-            try: prices_raw = json.loads(prices_raw)
-            except: continue
+            try:
+                prices_raw = json.loads(prices_raw)
+            except:
+                continue
         if not isinstance(prices_raw, list) or len(prices_raw) < 2:
             continue
         try:
@@ -276,15 +326,17 @@ def detect_edge_signals(markets: list, category_filter: str = None) -> list:
         if category_filter and cat != category_filter:
             continue
 
-        signals.append({
-            "market_id": m.get("conditionId", ""),
-            "question": question,
-            "volume": vol,
-            "yes_price": yes,
-            "deviation": dev,
-            "category": cat,
-            "slug": m.get("slug", ""),
-        })
+        signals.append(
+            {
+                "market_id": m.get("conditionId", ""),
+                "question": question,
+                "volume": vol,
+                "yes_price": yes,
+                "deviation": dev,
+                "category": cat,
+                "slug": m.get("slug", ""),
+            }
+        )
 
     signals.sort(key=lambda s: s["deviation"], reverse=True)
     return signals
@@ -292,7 +344,15 @@ def detect_edge_signals(markets: list, category_filter: str = None) -> list:
 
 CATEGORY_KEYWORDS = {
     "sports": ["relegat", "qualify", "championship", "league", "finish"],
-    "geopolitics": ["russia", "ukraine", "iran", "china", "taiwan", "ceasefire", "tariff"],
+    "geopolitics": [
+        "russia",
+        "ukraine",
+        "iran",
+        "china",
+        "taiwan",
+        "ceasefire",
+        "tariff",
+    ],
     "tech": ["release", "launch", "gta", "iphone", "feature", "model"],
     "weather": ["temperature", "rain", "snow", "storm", "°"],
 }
@@ -308,10 +368,239 @@ def categorize(question: str) -> str:
 
 
 # ============================================================================
+# WorldMonitor Intelligence
+# ============================================================================
+
+_wm_cache: dict = {"data": None, "ts": 0}
+
+
+def fetch_wm_intelligence() -> dict:
+    """Fetch WorldMonitor risk scores, cross-source signals, and market implications.
+    Falls back to direct GDELT queries if WM API is unavailable (auth required)."""
+    now = time.time()
+    if _wm_cache["data"] and now - _wm_cache["ts"] < WM_CACHE_TTL:
+        return _wm_cache["data"]
+
+    result = {
+        "risk_scores": [],
+        "cross_source_signals": [],
+        "market_implications": [],
+        "geo_heat": 0.0,
+        "geo_sentiment": "calm",
+        "relevant_countries": [],
+        "market_bias": "neutral",
+        "market_bias_drivers": [],
+    }
+
+    try:
+        headers = {"Accept": "application/json", "User-Agent": "PolyAgent/1.0"}
+        timeout = 15
+
+        try:
+            risk_resp = requests.get(
+                f"{WM_BASE}/api/intelligence/v1/get-risk-scores",
+                headers=headers,
+                timeout=timeout,
+            )
+            if risk_resp.ok:
+                risk_data = risk_resp.json()
+                scores = risk_data.get("ciiScores", [])
+                result["risk_scores"] = scores
+                high_risk = [s for s in scores if s.get("combinedScore", 0) >= 50]
+                if high_risk:
+                    result["geo_heat"] = (
+                        sum(s["combinedScore"] for s in high_risk)
+                        / len(high_risk)
+                        / 100
+                    )
+                    result["relevant_countries"] = list(
+                        {s["region"] for s in high_risk}
+                    )
+        except Exception:
+            pass
+
+        try:
+            signals_resp = requests.get(
+                f"{WM_BASE}/api/intelligence/v1/list-cross-source-signals",
+                headers=headers,
+                timeout=timeout,
+            )
+            if signals_resp.ok:
+                sig_data = signals_resp.json()
+                signals = sig_data.get("signals", [])
+                result["cross_source_signals"] = signals
+                critical = [
+                    s
+                    for s in signals
+                    if "HIGH" in s.get("severity", "")
+                    or "CRITICAL" in s.get("severity", "")
+                ]
+                if critical:
+                    result["relevant_countries"].extend(
+                        s.get("theater", "") for s in critical
+                    )
+                    result["relevant_countries"] = list(
+                        set(result["relevant_countries"])
+                    )
+        except Exception:
+            pass
+
+        try:
+            mkt_resp = requests.get(
+                f"{WM_BASE}/api/intelligence/v1/list-market-implications",
+                headers=headers,
+                timeout=timeout,
+            )
+            if mkt_resp.ok:
+                mkt_data = mkt_resp.json()
+                cards = mkt_data.get("cards", [])
+                result["market_implications"] = cards
+                bullish = sum(
+                    1
+                    for c in cards
+                    if any(
+                        w in c.get("direction", "").lower()
+                        for w in ["bullish", "up", "long"]
+                    )
+                )
+                bearish = sum(
+                    1
+                    for c in cards
+                    if any(
+                        w in c.get("direction", "").lower()
+                        for w in ["bearish", "down", "short"]
+                    )
+                )
+                if bullish + bearish > 0:
+                    net = (bullish - bearish) / (bullish + bearish)
+                    result["market_bias"] = (
+                        "bullish"
+                        if net > 0.2
+                        else "bearish"
+                        if net < -0.2
+                        else "neutral"
+                    )
+                    result["market_bias_drivers"] = [
+                        c.get("title", "") for c in cards[:3]
+                    ]
+        except Exception:
+            pass
+
+    except Exception as e:
+        print(f"  ⚠ WorldMonitor fetch failed: {e}", file=sys.stderr)
+
+    if not result["risk_scores"] and not result["cross_source_signals"]:
+        print(
+            f"  ⚠ WM API unavailable — using direct GDELT enrichment", file=sys.stderr
+        )
+        result = _fetch_gdelt_fallback(result)
+
+    geo_score = result["geo_heat"]
+    result["geo_sentiment"] = (
+        "critical"
+        if geo_score >= 0.8
+        else "elevated"
+        if geo_score >= 0.6
+        else "moderate"
+        if geo_score >= 0.4
+        else "calm"
+    )
+
+    _wm_cache["data"] = result
+    _wm_cache["ts"] = now
+    return result
+
+
+def _fetch_gdelt_fallback(result: dict) -> dict:
+    """Fallback: query GDELT API directly for geopolitical sentiment."""
+    try:
+        queries = [
+            ("(military OR airstrike OR naval) sourcelang:eng", "conflict"),
+            ("(sanctions OR embargo OR tariff) sourcelang:eng", "economic"),
+            ("(cyberattack OR ransomware) sourcelang:eng", "cyber"),
+        ]
+        for query, category in queries:
+            try:
+                url = f"https://api.gdeltproject.org/api/v2/doc/doc?query={url_quote(query)}&mode=artlist&maxrecords=5&format=json&timespan=7d"
+                resp = requests.get(
+                    url, timeout=10, headers={"User-Agent": "PolyAgent/1.0"}
+                )
+                if not resp.ok or not resp.text.strip():
+                    continue
+                data = resp.json()
+                articles = data.get("articles", [])
+                for art in articles[:3]:
+                    title = art.get("title", "")
+                    tone = 0.0
+                    try:
+                        tone = float(art.get("tone", "0").split(",")[0])
+                    except (ValueError, IndexError):
+                        pass
+                    result["cross_source_signals"].append(
+                        {
+                            "id": f"gdelt_{category}",
+                            "type": category,
+                            "theater": "Global",
+                            "summary": title[:100],
+                            "severity": "CRITICAL"
+                            if tone < -5
+                            else "HIGH"
+                            if tone < -2
+                            else "MEDIUM",
+                            "severityScore": abs(tone),
+                            "detectedAt": int(time.time() * 1000),
+                            "contributingTypes": [category],
+                            "signalCount": len(articles),
+                        }
+                    )
+                if len(articles) > 3:
+                    result["geo_heat"] = min(1.0, result["geo_heat"] + 0.1)
+                time.sleep(6)
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"  ⚠ GDELT fallback failed: {e}", file=sys.stderr)
+    return result
+
+
+def enrich_signal_with_intel(signal: dict, wm_intel: dict) -> dict:
+    """Enrich a market signal with WorldMonitor geopolitical intelligence."""
+    question = signal.get("question", "").lower()
+
+    country_boost = 0.0
+    for country in wm_intel.get("relevant_countries", []):
+        if country.lower() in question:
+            for rs in wm_intel.get("risk_scores", []):
+                if rs.get("region") == country:
+                    country_boost = max(country_boost, rs.get("combinedScore", 0) / 200)
+                    break
+
+    geo_boost = wm_intel.get("geo_heat", 0) * 0.1
+
+    bias = wm_intel.get("market_bias", "neutral")
+    bias_adj = 0.02 if bias == "bullish" else -0.02 if bias == "bearish" else 0.0
+
+    signal["wm_geo_sentiment"] = wm_intel.get("geo_sentiment", "unknown")
+    signal["wm_country_risk"] = country_boost
+    signal["wm_geo_boost"] = geo_boost
+    signal["wm_bias"] = bias
+    signal["wm_enriched"] = True
+
+    signal["deviation"] = min(
+        0.50, signal["deviation"] + country_boost + geo_boost + bias_adj
+    )
+
+    return signal
+
+
+# ============================================================================
 # Risk Check
 # ============================================================================
 
-def risk_check(signal: dict, brain: SwarmBrain, agent_id: str) -> tuple[bool, str, float]:
+
+def risk_check(
+    signal: dict, brain: SwarmBrain, agent_id: str
+) -> tuple[bool, str, float]:
     """Run pre-trade risk checks. Returns (allowed, reason, adjusted_size)."""
     reasons = []
     size = min(MAX_POSITION_USDC, signal["volume"] * 0.01)  # 1% of market volume
@@ -319,7 +608,9 @@ def risk_check(signal: dict, brain: SwarmBrain, agent_id: str) -> tuple[bool, st
     # Daily exposure
     daily_exposure = brain.get_daily_exposure(agent_id)
     if daily_exposure + size > MAX_DAILY_RISK:
-        reasons.append(f"Daily exposure ${daily_exposure:.0f} + ${size:.0f} > ${MAX_DAILY_RISK}")
+        reasons.append(
+            f"Daily exposure ${daily_exposure:.0f} + ${size:.0f} > ${MAX_DAILY_RISK}"
+        )
 
     # Daily loss
     daily_pnl = brain.get_daily_pnl(agent_id)
@@ -347,6 +638,7 @@ def risk_check(signal: dict, brain: SwarmBrain, agent_id: str) -> tuple[bool, st
 # Telegram
 # ============================================================================
 
+
 def send_telegram(text: str) -> bool:
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         return False
@@ -365,6 +657,7 @@ def send_telegram(text: str) -> bool:
 # Swarm Agent
 # ============================================================================
 
+
 class SwarmAgent:
     """Self-learning trading agent. Reads signals → trades → learns."""
 
@@ -375,24 +668,41 @@ class SwarmAgent:
         self.executor = TradeExecutor(private_key) if private_key else None
 
     def run_cycle(self):
-        """Single decision cycle: scan → decide → execute → learn."""
-        print(f"\n◆ {self.agent_id} — cycle start {datetime.now().strftime('%H:%M:%S')}", file=sys.stderr)
+        """Single decision cycle: scan → enrich with WM intel → decide → execute → learn."""
+        print(
+            f"\n◆ {self.agent_id} — cycle start {datetime.now().strftime('%H:%M:%S')}",
+            file=sys.stderr,
+        )
 
         # 1. Scan for signals
         markets = fetch_markets(100)
         signals = detect_edge_signals(markets, self.category)
-        print(f"  {len(signals)} edge signals in {self.category}", file=sys.stderr)
+        print(f"  {len(signals)} raw edge signals in {self.category}", file=sys.stderr)
 
         if not signals:
             self._log_learning("No edge signals found — market is efficient")
             return
 
-        # 2. Load past learnings for context
-        learnings = self.brain.get_learnings(self.category, limit=5)
-        learning_context = "; ".join([l["insight"] for l in learnings]) if learnings else "none"
+        # 2. Enrich with WorldMonitor intelligence
+        wm_intel = fetch_wm_intelligence()
+        enriched = [enrich_signal_with_intel(s, wm_intel) for s in signals]
+        enriched.sort(key=lambda s: s["deviation"], reverse=True)
 
-        # 3. For top signal: risk check → execute
-        top = signals[0]
+        geo_label = wm_intel.get("geo_sentiment", "unknown")
+        bias_label = wm_intel.get("market_bias", "neutral")
+        print(
+            f"  WM intel: geo={geo_label} bias={bias_label} countries={wm_intel.get('relevant_countries', [])[:5]}",
+            file=sys.stderr,
+        )
+
+        # 3. Load past learnings for context
+        learnings = self.brain.get_learnings(self.category, limit=5)
+        learning_context = (
+            "; ".join([l["insight"] for l in learnings]) if learnings else "none"
+        )
+
+        # 4. For top signal: risk check → execute
+        top = enriched[0]
         allowed, reason, size = risk_check(top, self.brain, self.agent_id)
 
         if not allowed:
@@ -400,14 +710,23 @@ class SwarmAgent:
             return
 
         # 4. Execute trade
-        outcome = "NO" if top["yes_price"] > 0.50 else "YES"  # fade the consensus on obscure
-        trade_id = hashlib.md5(f"{self.agent_id}{top['market_id']}{time.time()}".encode()).hexdigest()[:16]
+        outcome = (
+            "NO" if top["yes_price"] > 0.50 else "YES"
+        )  # fade the consensus on obscure
+        trade_id = hashlib.md5(
+            f"{self.agent_id}{top['market_id']}{time.time()}".encode()
+        ).hexdigest()[:16]
 
-        print(f"  ▶ {outcome} on {top['question'][:60]} at {top['yes_price']:.3f} for ${size:.2f}", file=sys.stderr)
+        print(
+            f"  ▶ {outcome} on {top['question'][:60]} at {top['yes_price']:.3f} for ${size:.2f}",
+            file=sys.stderr,
+        )
 
         result = {"success": False, "error": "dry run — no private key"}
         if self.executor:
-            result = self.executor.place_order(top["market_id"], outcome, top["yes_price"], size)
+            result = self.executor.place_order(
+                top["market_id"], outcome, top["yes_price"], size
+            )
 
         # 5. Log trade
         trade = {
@@ -423,15 +742,19 @@ class SwarmAgent:
             "status": "filled" if result.get("success") else "failed",
             "edge_deviation": top["deviation"],
             "confidence": top["deviation"] * 100,
-            "notes": f"signal_dev={top['deviation']:.2f} vol=${top['volume']:.0f} {reason}",
+            "notes": f"signal_dev={top['deviation']:.2f} vol=${top['volume']:.0f} wm_geo={top.get('wm_geo_sentiment', 'n/a')} wm_bias={top.get('wm_bias', 'n/a')} {reason}",
         }
         self.brain.log_trade(trade)
 
         # 6. Update agent state
-        self.brain.update_agent_state(self.agent_id, {
-            "last_trade": datetime.now(timezone.utc).isoformat(),
-            "daily_trades": self.brain.get_daily_exposure(self.agent_id) / max(size, 1),
-        })
+        self.brain.update_agent_state(
+            self.agent_id,
+            {
+                "last_trade": datetime.now(timezone.utc).isoformat(),
+                "daily_trades": self.brain.get_daily_exposure(self.agent_id)
+                / max(size, 1),
+            },
+        )
 
         # 7. Telegram confirmation
         if result.get("success"):
@@ -441,7 +764,9 @@ class SwarmAgent:
                 f"<b>{top['question'][:80]}</b>\n"
                 f"TX: <code>{result['tx_hash'][:16]}...</code>"
             )
-            self._log_learning(f"EXECUTED {outcome} on {top['question'][:40]} — monitoring outcome")
+            self._log_learning(
+                f"EXECUTED {outcome} on {top['question'][:40]} — monitoring outcome"
+            )
         else:
             print(f"  ✗ Failed: {result.get('error', 'unknown')}", file=sys.stderr)
 
@@ -450,9 +775,15 @@ class SwarmAgent:
 
     def run_loop(self):
         """Continuous scan → trade loop."""
-        print(f"◆ PolyAgent {self.agent_id} [{self.category}] starting...", file=sys.stderr)
+        print(
+            f"◆ PolyAgent {self.agent_id} [{self.category}] starting...",
+            file=sys.stderr,
+        )
         balance = self.executor.get_balance() if self.executor else 0
-        print(f"  Wallet: {self.executor.address if self.executor else 'N/A'} | Balance: ${balance:.2f}", file=sys.stderr)
+        print(
+            f"  Wallet: {self.executor.address if self.executor else 'N/A'} | Balance: ${balance:.2f}",
+            file=sys.stderr,
+        )
 
         while True:
             try:
@@ -469,10 +800,14 @@ class SwarmAgent:
 # CLI
 # ============================================================================
 
+
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="PolyAgent Swarm Trading Agent")
-    parser.add_argument("--category", default=None, help="Market category to specialize in")
+    parser.add_argument(
+        "--category", default=None, help="Market category to specialize in"
+    )
     parser.add_argument("--agent-id", default=None, help="Unique agent identifier")
     parser.add_argument("--once", action="store_true", help="Single cycle, then exit")
     parser.add_argument("--private-key", default=None, help="Wallet private key")
@@ -480,12 +815,21 @@ def main():
 
     # Auto-detect category from env or arg
     category = args.category or os.environ.get("STEALTH_CATEGORY", "sports")
-    agent_id = args.agent_id or f"polyagent_{category}_{hashlib.md5(category.encode()).hexdigest()[:6]}"
+    agent_id = (
+        args.agent_id
+        or f"polyagent_{category}_{hashlib.md5(category.encode()).hexdigest()[:6]}"
+    )
 
     private_key = args.private_key or os.environ.get("POLYMARKET_PRIVATE_KEY", "")
     if not private_key:
-        print("⚠ POLYMARKET_PRIVATE_KEY not set — trading in dry-run mode", file=sys.stderr)
-        print("  Set env var or pass --private-key to execute real trades", file=sys.stderr)
+        print(
+            "⚠ POLYMARKET_PRIVATE_KEY not set — trading in dry-run mode",
+            file=sys.stderr,
+        )
+        print(
+            "  Set env var or pass --private-key to execute real trades",
+            file=sys.stderr,
+        )
 
     agent = SwarmAgent(agent_id, category, private_key)
 
